@@ -1,0 +1,142 @@
+[
+  {
+    "number": 1,
+    "file": "newFile.png"
+  },
+  {
+    "number": 2,
+    "file": "openFile.png"
+  },
+  {
+    "number": 3,
+    "file": "saveFile.png"
+  },
+  {
+    "number": 4,
+    "file": "saveAll.png"
+  },
+  {
+    "number": 5,
+    "file": "closeFile.png"
+  },
+  {
+    "number": 6,
+    "file": "closeAll.png"
+  },
+  {
+    "number": 7,
+    "file": "print.png"
+  },
+  {
+    "number": 8,
+    "file": "cut.png"
+  },
+  {
+    "number": 9,
+    "file": "copy.png"
+  },
+  {
+    "number": 10,
+    "file": "paste.png"
+  },
+  {
+    "number": 11,
+    "file": "undo.png"
+  },
+  {
+    "number": 12,
+    "file": "redo.png"
+  },
+  {
+    "number": 13,
+    "file": "find.png"
+  },
+  {
+    "number": 14,
+    "file": "findReplace.png"
+  },
+  {
+    "number": 15,
+    "file": "zoomIn.png"
+  },
+  {
+    "number": 16,
+    "file": "zoomOut.png"
+  },
+  {
+    "number": 17,
+    "file": "syncV.png"
+  },
+  {
+    "number": 18,
+    "file": "syncH.png"
+  },
+  {
+    "number": 19,
+    "file": "wrap.png"
+  },
+  {
+    "number": 20,
+    "file": "allChars.png"
+  },
+  {
+    "number": 21,
+    "file": "indentGuide.png"
+  },
+  {
+    "number": 22,
+    "file": "udl.png"
+  },
+  {
+    "number": 23,
+    "file": "docMap.png"
+  },
+  {
+    "number": 24,
+    "file": "docList.png"
+  },
+  {
+    "number": 25,
+    "file": "funcList.png"
+  },
+  {
+    "number": 26,
+    "file": "fileBrowser.png"
+  },
+  {
+    "number": 27,
+    "file": "characterPanel.png"
+  },
+  {
+    "number": 28,
+    "file": "clipboardHistory.png"
+  },
+  {
+    "number": 29,
+    "file": "projectPanel.png"
+  },
+  {
+    "number": 30,
+    "file": "monitoring.png"
+  },
+  {
+    "number": 31,
+    "file": "startRecord.png"
+  },
+  {
+    "number": 32,
+    "file": "stopRecord.png"
+  },
+  {
+    "number": 33,
+    "file": "playRecord.png"
+  },
+  {
+    "number": 34,
+    "file": "playRecord_m.png"
+  },
+  {
+    "number": 35,
+    "file": "saveRecord.png"
+  }
+]
