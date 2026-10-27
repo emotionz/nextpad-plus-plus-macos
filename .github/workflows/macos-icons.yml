@@ -1,4 +1,4 @@
-name: Build macOS toolbar update
+name: Build macOS Chinese interface
 on:
   push:
     branches: [main]
@@ -29,7 +29,7 @@ jobs:
             echo 'Unexpected external runtime dependency'; exit 1
           fi
           mkdir -p "$RUNNER_TEMP/nextpad-home"
-          HOME="$RUNNER_TEMP/nextpad-home" "$bin" >build/launch.log 2>&1 &
+          HOME="$RUNNER_TEMP/nextpad-home" "$bin" -language chineseSimplified >build/launch.log 2>&1 &
           app_pid=$!
           sleep 12
           kill -0 "$app_pid"
