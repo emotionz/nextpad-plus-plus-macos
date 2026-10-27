@@ -3538,12 +3538,12 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     return ![ident isEqualToString:kTBGroup10]; // all groups except the last macro group
 }
 
-// Pack a set of buttons into a single NSToolbarItem view with 1pt spacing.
+// Pack buttons with the configured spacing and keep the separator inside the item.
 - (NSToolbarItem *)makeGroupToolbarItem:(NSString *)ident identifiers:(NSArray *)idents {
     const CGFloat kBtnSize = nppBtnSize();
     const CGFloat kSpacing = nppSpacing();
     static const CGFloat kSepPadL =  5.0; // padding left of separator (cosmetic)
-    static const CGFloat kSepPadR = -4.0; // negative to compensate NSToolbar inter-item gap
+    static const CGFloat kSepPadR =  5.0; // reserve room after the separator inside the item
 
     // Filter out hidden buttons from toolbar config
     NSSet *hiddenIDs = _toolbarConfig[@"hiddenIDs"];
@@ -3641,7 +3641,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     const CGFloat kGap      = nppSpacing();
     const CGFloat kInnerGap = nppInnerGap();   // gap between chars button and dropdown arrow
     static const CGFloat kSepPadL = 5.0;       // cosmetic, not size-dependent
-    static const CGFloat kSepPadR = -4.0;
+    static const CGFloat kSepPadR = 5.0;        // keep the separator within the item bounds
     CGFloat hoverW  = kBtnSize + kInnerGap + kDropW;
     CGFloat buttonsW = kBtnSize + kGap + hoverW + kGap + kBtnSize; // wrap + allchars group + indent
     CGFloat totalW  = buttonsW + kSepPadL + 1 + kSepPadR; // + trailing separator
