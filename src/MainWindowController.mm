@@ -1256,6 +1256,22 @@ static NSImage *_nppColorizeToolbarImage(NSImage *img) {
 }
 
 static NSImage *nppToolbarIcon(NSString *fileName) {
+    // Preserve the supplied artwork's colors; existing button state drawing still applies.
+    NSString *artworkName = @{
+        @"sf:character": @"characterPanel",
+        @"sf:doc.on.clipboard": @"clipboardHistory",
+        @"sf:list.bullet.rectangle": @"projectPanel"
+    }[fileName] ?: fileName;
+    NSString *artworkPath = [[NSBundle mainBundle] pathForResource:artworkName
+                                                         ofType:@"png"
+                                                    inDirectory:@"icons/reference-toolbar"];
+    NSImage *artwork = artworkPath ? [[NSImage alloc] initWithContentsOfFile:artworkPath] : nil;
+    if (artwork) {
+        artwork.template = NO;
+        artwork.size = NSMakeSize(nppIconSize(), nppIconSize());
+        artwork.cacheMode = NSImageCacheNever;
+        return artwork;
+    }
     // "sf:<symbol>" → a system SF Symbol (template-rendered). Used by Tahoe-only
     // toolbar items that have no bundled PNG (e.g. the Character/Clipboard/Project
     // panels). Returned as a template so menu items / buttons tint it correctly.
