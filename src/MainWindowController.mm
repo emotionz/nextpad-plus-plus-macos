@@ -1267,7 +1267,7 @@ static NSImage *nppToolbarIcon(NSString *fileName) {
                                                     inDirectory:@"icons/reference-toolbar"];
     NSImage *artwork = artworkPath ? [[NSImage alloc] initWithContentsOfFile:artworkPath] : nil;
     if (artwork) {
-        artwork.template = NO;
+        [artwork setTemplate:NO];
         artwork.size = NSMakeSize(nppIconSize(), nppIconSize());
         artwork.cacheMode = NSImageCacheNever;
         return artwork;
