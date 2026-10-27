@@ -338,11 +338,6 @@ static BOOL _nppColorIsDark(NSColor *color) {
     return rgb ? rgb.brightnessComponent < 0.5 : NO;
 }
 
-+ (NSAppearance *)appearanceForBackground:(NSColor *)background {
-    return [NSAppearance appearanceNamed:_nppColorIsDark(background)
-                                         ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
-}
-
 - (NSColor *)documentMapViewportColorOnBackground:(NSColor *)background
                                        themeColor:(nullable NSColor *)themeColor {
     BOOL darkBg = _nppColorIsDark(background);
