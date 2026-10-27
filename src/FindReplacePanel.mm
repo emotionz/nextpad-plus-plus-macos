@@ -247,6 +247,8 @@ static const CGFloat kHiddenHeight     =  0.0;
 - (void)retranslateUI {
     NppLocalizer *loc = [NppLocalizer shared];
     _findLabel.stringValue    = [loc translate:@"Find:"];
+    _findField.placeholderString = [loc translate:@"Search…"];
+    _replaceField.placeholderString = [loc translate:@"Replace with…"];
     _replaceLabel.stringValue = [loc translate:@"Replace:"];
     _matchCaseBtn.title       = [loc translate:@"Match Case"];
     _wholeWordBtn.title       = [loc translate:@"Whole Word"];

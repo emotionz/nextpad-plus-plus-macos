@@ -1067,7 +1067,7 @@ static NSString *const kTBTahoePluginsGroup = @"TB_TPlugins";
 // has changed.
 static CGFloat _scaledBtn         = 28.0;
 static CGFloat _scaledIcon        = 26.0;
-static CGFloat _scaledSpacing     =  2.0;
+static CGFloat _scaledSpacing     =  4.0;
 static CGFloat _scaledSepGap      = 10.0;
 static CGFloat _scaledInnerGap    =  2.0;
 static CGFloat _scaledDropW       = 29.0;
@@ -1082,7 +1082,7 @@ static void _ensureToolbarMetrics(void) {
         if (s < 0.50 - 1e-6 || s > 1.50 + 1e-6) s = 1.0;
         _scaledBtn      = round(28.0 * s);
         _scaledIcon     = round(26.0 * s);
-        _scaledSpacing  = round( 2.0 * s);
+        _scaledSpacing  = round( 4.0 * s);
         _scaledSepGap   = round(10.0 * s);
         _scaledInnerGap = round( 2.0 * s);
         _scaledDropW    = round(29.0 * s);
@@ -1644,7 +1644,7 @@ static const CGFloat kTGRadius   = 12.0;  // pill corner radius (rounded, mockup
     [_labelButton setButtonType:NSButtonTypeMomentaryChange];
     NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new];
     ps.alignment = NSTextAlignmentCenter;
-    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:label attributes:@{
+    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:[[NppLocalizer shared] translate:label] attributes:@{
         NSFontAttributeName:            [NSFont systemFontOfSize:11 weight:NSFontWeightMedium],
         NSForegroundColorAttributeName: [NSColor labelColor],   // near-black like the mockup
         NSParagraphStyleAttributeName:  ps,
@@ -3185,7 +3185,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
             initWithFrame:NSMakeRect(0, 0, kTGBtn, kTGBtn)];
         NSImage *img = nppToolbarIcon(desc[3]);
         if (img) { img.size = NSMakeSize(iconSz, iconSz); b.image = img; }
-        b.toolTip = desc[2];
+        b.toolTip = [[NppLocalizer shared] translate:desc[2]];
         b.target  = self;
         b.action  = NSSelectorFromString(desc[4]);
         [buttons addObject:b];
@@ -3200,7 +3200,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
             NSArray *desc = descMap[btnId];
             if (!desc) continue;
             NSMenuItem *mi = [[NSMenuItem alloc]
-                initWithTitle:desc[1] action:NSSelectorFromString(desc[4]) keyEquivalent:@""];
+                initWithTitle:[[NppLocalizer shared] translate:desc[1]] action:NSSelectorFromString(desc[4]) keyEquivalent:@""];
             mi.target = self;
             NSImage *mIcon = nppToolbarIcon(desc[3]);
             if (mIcon) { mIcon.size = NSMakeSize(16, 16); mi.image = mIcon; }
@@ -3217,7 +3217,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:groupIdent];
     item.view         = gv;
     item.label        = @"";          // the view draws its own label
-    item.paletteLabel = groupLabel;
+    item.paletteLabel = [[NppLocalizer shared] translate:groupLabel];
     item.minSize      = gv.frame.size;
     item.maxSize      = gv.frame.size;
     return item;
@@ -3285,7 +3285,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:groupIdent];
     item.view         = gv;
     item.label        = @"";
-    item.paletteLabel = @"Plugins";
+    item.paletteLabel = [[NppLocalizer shared] translate:@"Plugins"];
     item.minSize      = gv.frame.size;
     item.maxSize      = gv.frame.size;
     return item;
@@ -3447,7 +3447,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
                 initWithFrame:NSMakeRect(x, 0, kBtnSize, kBtnSize)];
         }
         button.image = img;
-        button.toolTip = name;
+        button.toolTip = [[NppLocalizer shared] translate:desc ? desc[2] : name];
         button.identifier = desc ? desc[3] : btnId; // icon name for dark mode refresh
 
         // Set action: use the descriptor's action if available, otherwise use the XML action
@@ -3596,7 +3596,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
             btn.image   = img;
             btn.action  = NSSelectorFromString(desc[4]);
             btn.target  = self;
-            btn.toolTip = desc[2];
+            btn.toolTip = [[NppLocalizer shared] translate:desc[2]];
             btn.identifier = desc[3]; // store icon filename for dark mode refresh
             [groupView addSubview:btn];
 
@@ -3735,7 +3735,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
         btn.buttonType = NSButtonTypeMomentaryChange;
         btn.title      = btns[i].title;
         btn.font       = [NSFont systemFontOfSize:16 weight:NSFontWeightMedium];
-        btn.toolTip    = btns[i].tip;
+        btn.toolTip    = [[NppLocalizer shared] translate:btns[i].tip];
         btn.action     = btns[i].action;
         btn.target     = self;
         [groupView addSubview:btn];
@@ -4131,6 +4131,9 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     // subscriber for the title.
     [[NSNotificationCenter defaultCenter]
         addObserver:self selector:@selector(_refreshOpenPanelTitles)
+               name:NPPLocalizationChanged object:nil];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self selector:@selector(_toolbarLanguageChanged:)
                name:NPPLocalizationChanged object:nil];
     // Editor right-click context menu — built once from contextMenu.xml using
     // string-keyed lookups against the (already translated) main menu, then
@@ -10799,6 +10802,11 @@ static BOOL _writeCLIScript(NSString *script, NSString *path, NSError **outErr) 
     // Plugin-supplied toolbar icons (Path A: `toolbar_dark.png` convention
     // alongside `toolbar.png`, or `<hint>_dark.<ext>` next to `<hint>`).
     [self _refreshPluginToolbarIcons];
+}
+
+- (void)_toolbarLanguageChanged:(NSNotification *)n {
+    [self buildToolbar];
+    [self _refreshToolbarStates];
 }
 
 - (void)_toolbarColorChanged:(NSNotification *)n {

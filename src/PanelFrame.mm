@@ -1,4 +1,5 @@
 #import "PanelFrame.h"
+#import "NppLocalizer.h"
 #import "NppThemeManager.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ static NSImage *_PFLoadIcon(NSString *name) {
 - (void)setPopped:(BOOL)popped {
     if (_popped == popped) return;
     _popped = popped;
-    self.toolTip = popped ? @"Dock back" : @"Detach";
+    self.toolTip = [[NppLocalizer shared] translate:popped ? @"Dock back" : @"Detach"];
     [self setNeedsDisplay:YES];
 }
 
@@ -265,7 +266,7 @@ static NSImage *_PFLoadIcon(NSString *name) {
     _popButton.target = self;
     _popButton.action = @selector(_popClicked:);
     _popButton.font = [NSFont systemFontOfSize:11];
-    _popButton.toolTip = @"Detach";
+    _popButton.toolTip = [[NppLocalizer shared] translate:@"Detach"];
     [_titleBar addSubview:_popButton];
 
     _closeButton = [[_PFCloseButton alloc] initWithFrame:NSZeroRect];
@@ -273,7 +274,7 @@ static NSImage *_PFLoadIcon(NSString *name) {
     _closeButton.target = self;
     _closeButton.action = @selector(_closeClicked:);
     _closeButton.font = [NSFont systemFontOfSize:11];
-    _closeButton.toolTip = @"Close panel";
+    _closeButton.toolTip = [[NppLocalizer shared] translate:@"Close panel"];
     [_titleBar addSubview:_closeButton];
 
     // Separator
@@ -400,6 +401,8 @@ static NSImage *_PFLoadIcon(NSString *name) {
 
 - (void)setTitle:(NSString *)title {
     _titleLabel.stringValue = title ?: @"";
+    _popButton.toolTip = [[NppLocalizer shared] translate:_popButton.popped ? @"Dock back" : @"Detach"];
+    _closeButton.toolTip = [[NppLocalizer shared] translate:@"Close panel"];
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 #import "ColumnEditorPanel.h"
 #import "EditorView.h"
+#import "NppLocalizer.h"
 
 // ── ColumnEditorPanel ─────────────────────────────────────────────────────────
 // Mirrors NPP's Column / Multi-Selection Editor dialog.
@@ -50,7 +51,7 @@
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static NSTextField *_lbl(NSString *s, NSRect r) {
-    NSTextField *f = [NSTextField labelWithString:s];
+    NSTextField *f = [NSTextField labelWithString:[[NppLocalizer shared] translate:s]];
     f.frame = r;
     return f;
 }
@@ -63,18 +64,18 @@ static NSTextField *_lbl(NSString *s, NSRect r) {
                                          styleMask:NSWindowStyleMaskTitled
                                            backing:NSBackingStoreBuffered
                                              defer:NO];
-    _sheet.title = @"Column / Multi-Selection Editor";
+    _sheet.title = [[NppLocalizer shared] translate:@"Column / Multi-Selection Editor"];
 
     NSView *root = _sheet.contentView;
 
     // ── OK / Cancel buttons (bottom) ──────────────────────────────
-    NSButton *cancelBtn = [NSButton buttonWithTitle:@"Cancel"
+    NSButton *cancelBtn = [NSButton buttonWithTitle:[[NppLocalizer shared] translate:@"Cancel"]
                                              target:self action:@selector(onCancel:)];
     cancelBtn.keyEquivalent = @"\033";
     cancelBtn.frame = NSMakeRect(192, 12, 90, 28);
     [root addSubview:cancelBtn];
 
-    NSButton *okBtn = [NSButton buttonWithTitle:@"OK"
+    NSButton *okBtn = [NSButton buttonWithTitle:[[NppLocalizer shared] translate:@"OK"]
                                           target:self action:@selector(onOK:)];
     okBtn.keyEquivalent = @"\r";
     okBtn.frame = NSMakeRect(288, 12, 90, 28);
@@ -86,7 +87,7 @@ static NSTextField *_lbl(NSString *s, NSRect r) {
     // Leading
     NSTextField *leadLbl = _lbl(@"Leading:", NSMakeRect(16, numY, 110, 20));
     _leadingPop = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(130, numY - 2, 120, 22) pullsDown:NO];
-    [_leadingPop addItemsWithTitles:@[@"None", @"Zeros", @"Spaces"]];
+    [_leadingPop addItemsWithTitles:@[[[NppLocalizer shared] translate:@"None"], [[NppLocalizer shared] translate:@"Zeros"], [[NppLocalizer shared] translate:@"Spaces"]]];
 
     // Repeat
     NSTextField *repLbl  = _lbl(@"Repeat:", NSMakeRect(16, numY + 28, 110, 20));
@@ -110,7 +111,7 @@ static NSTextField *_lbl(NSString *s, NSRect r) {
     // ── Format box ────────────────────────────────────────────────
     CGFloat fmtBoxY = numY + 108;   // above the number fields
     NSBox *fmtBox = [[NSBox alloc] initWithFrame:NSMakeRect(12, fmtBoxY, 366, 60)];
-    fmtBox.title = @"Format";
+    fmtBox.title = [[NppLocalizer shared] translate:@"Format"];
     [root addSubview:fmtBox];
 
     NSView *fv = fmtBox.contentView;
@@ -148,19 +149,19 @@ static NSTextField *_lbl(NSString *s, NSRect r) {
     // ── Text field ────────────────────────────────────────────────
     CGFloat textY = sepY + 8;
     _textField = [[NSTextField alloc] initWithFrame:NSMakeRect(16, textY, 358, 22)];
-    _textField.placeholderString = @"Insert text at caret column on each line";
+    _textField.placeholderString = [[NppLocalizer shared] translate:@"Insert text at caret column on each line"];
     [root addSubview:_textField];
 
     // ── Mode radio buttons (top) ───────────────────────────────────
     CGFloat radioY = textY + 32;
 
-    _textRadio = [NSButton radioButtonWithTitle:@"Text to Insert"
+    _textRadio = [NSButton radioButtonWithTitle:[[NppLocalizer shared] translate:@"Text to Insert"]
                                           target:self action:@selector(onModeChange:)];
     _textRadio.frame = NSMakeRect(16, radioY, 155, 20);
     _textRadio.tag = 0;
     _textRadio.state = NSControlStateValueOn;
 
-    _numRadio = [NSButton radioButtonWithTitle:@"Number to Insert"
+    _numRadio = [NSButton radioButtonWithTitle:[[NppLocalizer shared] translate:@"Number to Insert"]
                                          target:self action:@selector(onModeChange:)];
     _numRadio.frame = NSMakeRect(185, radioY, 170, 20);
     _numRadio.tag = 1;

@@ -1,4 +1,5 @@
 #import "EditorView.h"
+#import "NppLocalizer.h"
 #import "NppPaths.h"
 #import "NppApplication.h"
 #import "NppLangsManager.h"
@@ -467,13 +468,13 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
             NSString *sizeMB = [NSString stringWithFormat:@"%.0f MB",
                                 fileSize / (1024.0 * 1024.0)];
             NSAlert *alert = [[NSAlert alloc] init];
-            alert.messageText = @"Large File Warning";
-            alert.informativeText = [NSString stringWithFormat:
+            alert.messageText = [[NppLocalizer shared] translate:@"Large File Warning"];
+            alert.informativeText = [NSString stringWithFormat:[[NppLocalizer shared] translate:
                 @"This file is %@. Opening it will disable syntax highlighting "
                 @"and undo history to keep the app responsive.\n\n"
-                @"Do you want to continue?", sizeMB];
-            [alert addButtonWithTitle:@"Open Anyway"];
-            [alert addButtonWithTitle:@"Cancel"];
+                @"Do you want to continue?"], sizeMB];
+            [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Open Anyway"]];
+            [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Cancel"]];
             alert.alertStyle = NSAlertStyleWarning;
             if ([alert runModal] != NSAlertFirstButtonReturn) {
                 if (error) *error = [NSError errorWithDomain:NSCocoaErrorDomain
@@ -1160,17 +1161,17 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
     }
 
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = [NSString stringWithFormat:@"\"%@\" changed on disk",
+    alert.messageText = [NSString stringWithFormat:[[NppLocalizer shared] translate:@"\"%@\" changed on disk"],
                          _filePath.lastPathComponent];
     if (!_isModified) {
-        alert.informativeText = @"This file was modified by another program.";
-        [alert addButtonWithTitle:@"Reload"];
-        [alert addButtonWithTitle:@"Ignore"];
+        alert.informativeText = [[NppLocalizer shared] translate:@"This file was modified by another program."];
+        [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Reload"]];
+        [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Ignore"]];
     } else {
-        alert.informativeText = @"This file was modified by another program. "
-                                @"Reloading will discard your unsaved changes.";
-        [alert addButtonWithTitle:@"Reload"];
-        [alert addButtonWithTitle:@"Keep My Version"];
+        alert.informativeText = [[NppLocalizer shared] translate:@"This file was modified by another program. "
+                                @"Reloading will discard your unsaved changes."];
+        [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Reload"]];
+        [alert addButtonWithTitle:[[NppLocalizer shared] translate:@"Keep My Version"]];
     }
 
     if ([alert runModal] == NSAlertFirstButtonReturn) {
@@ -1183,11 +1184,11 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
             if (!([err.domain isEqualToString:NSCocoaErrorDomain] &&
                   err.code == NSUserCancelledError)) {
                 NSAlert *failure = [[NSAlert alloc] init];
-                failure.messageText = [NSString stringWithFormat:@"Could not reload \"%@\"",
+                failure.messageText = [NSString stringWithFormat:[[NppLocalizer shared] translate:@"Could not reload \"%@\""],
                                        _filePath.lastPathComponent];
                 failure.informativeText = err.localizedDescription
-                                          ?: @"The file could not be read.";
-                [failure addButtonWithTitle:@"OK"];
+                                          ?: [[NppLocalizer shared] translate:@"The file could not be read."];
+                [failure addButtonWithTitle:[[NppLocalizer shared] translate:@"OK"]];
                 [failure runModal];
             }
         }

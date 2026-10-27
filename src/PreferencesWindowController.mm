@@ -1187,7 +1187,7 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
             tf.stringValue = [loc translate:item[@"label"]];
             tf.font = [NSFont boldSystemFontOfSize:NSFont.systemFontSize];
         } else {
-            tf.stringValue = item[@"display"] ?: (item[@"key"] ?: @"");
+            tf.stringValue = [loc translate:item[@"display"] ?: (item[@"key"] ?: @"")];
             tf.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
         }
         return tf;
@@ -2264,7 +2264,7 @@ static NSDictionary<NSString *, NSString *> *_langDisplayNames() {
     NSTextField *charsField = [[NSTextField alloc]
         initWithFrame:NSMakeRect(58, y - 2, 420, 22)];
     charsField.stringValue = [ud stringForKey:kPrefWordCharsAdded] ?: @"";
-    charsField.placeholderString = @"e.g. .$%-";
+    charsField.placeholderString = [[NppLocalizer shared] translate:@"e.g. .$%-"];
     charsField.tag = 1502;
     charsField.target = self;
     charsField.action = @selector(prefChanged:);

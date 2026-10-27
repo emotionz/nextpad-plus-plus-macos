@@ -56,7 +56,7 @@ static NSString *getText(NSScrollView *sv) {
 }
 
 static NSButton *stylerBtn(id tgt, SEL a) {
-    return [NSButton buttonWithTitle:@"Styler" target:tgt action:a];
+    return [NSButton buttonWithTitle:[[NppLocalizer shared] translate:@"Styler"] target:tgt action:a];
 }
 static NSButton *chk(NSString *t) {
     return [NSButton checkboxWithTitle:t target:nil action:nil];

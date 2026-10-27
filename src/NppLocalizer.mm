@@ -231,9 +231,6 @@ static NSString *normalizeForLookup(NSString *s) {
     if (!mainMenu) return;
 
     for (NSMenuItem *topItem in mainMenu.itemArray) {
-        // Skip the Application menu (index 0, title == app name).
-        if (topItem == mainMenu.itemArray.firstObject) continue;
-
         // On macOS the menu bar text comes from submenu.title, not item.title.
         // Translate both to cover all cases.
         [self _translateMenuItem:topItem];

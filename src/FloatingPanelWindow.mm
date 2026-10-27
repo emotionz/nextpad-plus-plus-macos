@@ -1,5 +1,6 @@
 #import "FloatingPanelWindow.h"
 #import "PanelFrame.h"
+#import "NppLocalizer.h"
 #import "NppThemeManager.h"
 
 // Default geometry for a freshly-popped panel. setFrameAutosaveName:
@@ -65,7 +66,7 @@ static NSImage *_FPWLoadPinIcon(BOOL pinned) {
         self.bordered   = NO;
         self.buttonType = NSButtonTypeMomentaryChange;
         self.title      = @"";
-        self.toolTip    = @"Dock back";
+        self.toolTip    = [[NppLocalizer shared] translate:@"Dock back"];
         NSTrackingArea *ta = [[NSTrackingArea alloc]
             initWithRect:NSZeroRect
                  options:(NSTrackingMouseEnteredAndExited |
@@ -147,7 +148,7 @@ static NSImage *_FPWLoadPinIcon(BOOL pinned) {
         self.bordered   = NO;
         self.buttonType = NSButtonTypeMomentaryChange;
         self.title      = @"";
-        self.toolTip    = @"Pin window on top";
+        self.toolTip    = [[NppLocalizer shared] translate:@"Pin window on top"];
         NSTrackingArea *ta = [[NSTrackingArea alloc]
             initWithRect:NSZeroRect
                  options:(NSTrackingMouseEnteredAndExited |
@@ -219,6 +220,7 @@ static NSImage *_FPWLoadPinIcon(BOOL pinned) {
 // titlebar accessory view is the real retainer; a weak pointer here is
 // safe too, but keeping strong avoids the weak-ref unload dance.
 @property (nonatomic, strong) _FPWPinButton *pinButton;
+@property (nonatomic, strong) NSButton *dockButton;
 @end
 
 @implementation FloatingPanelWindow
@@ -274,6 +276,9 @@ static NSImage *_FPWLoadPinIcon(BOOL pinned) {
     pinBtn.action = @selector(_pinClicked:);
     pinBtn.translatesAutoresizingMaskIntoConstraints = NO;
     _pinButton = pinBtn;
+    _dockButton = dockBtn;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+        selector:@selector(_localizationChanged:) name:NPPLocalizationChanged object:nil];
 
     // Holder width: 17 + 1 (gap) + 17 + 4 (trailing pad) + 2 (leading
     // slack) = 41.
@@ -338,6 +343,11 @@ static NSImage *_FPWLoadPinIcon(BOOL pinned) {
 
 // Per-panel NSUserDefaults key. Shares the autosave name with the frame
 // autosave so each panel class remembers its pin state independently.
+- (void)_localizationChanged:(NSNotification *)note {
+    self.dockButton.toolTip = [[NppLocalizer shared] translate:@"Dock back"];
+    self.pinButton.toolTip = [[NppLocalizer shared] translate:@"Pin window on top"];
+}
+
 - (NSString *)_pinDefaultsKey {
     if (!self.panelFrame.contentView) return @"";
     NSString *cls = NSStringFromClass([self.panelFrame.contentView class]);

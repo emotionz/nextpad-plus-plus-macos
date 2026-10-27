@@ -389,6 +389,7 @@ static NSButton *_flPanelBtn(NSString *iconName, NSString *tip,
 - (void)retranslateUI {
     NppLocalizer *loc = [NppLocalizer shared];
     _emptyLabel.stringValue = [loc translate:@"No functions found"];
+    _searchField.placeholderString = [loc translate:@"Search function..."];
     _sortButton.toolTip     = [loc translate:@"Sort functions (A to Z)"];
     _reloadButton.toolTip   = [loc translate:@"Reload"];
 }
