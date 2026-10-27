@@ -25,7 +25,7 @@ jobs:
           codesign --verify --deep --strict "$app"
           test "$(find "$app/Contents/Resources/icons/reference-toolbar" -name '*.png' | wc -l | tr -d ' ')" = 35
           otool -L "$bin" | tee build/dependencies.txt
-          if otool -L "$bin" | tail -n +2 | awk '{print $1}' | grep -Ev '^(/usr/lib/|/System/Library/)'; then
+          if otool -L "$bin" | awk '/^[[:space:]]/ {print $1}' | grep -Ev '^(/usr/lib/|/System/Library/)'; then
             echo 'Unexpected external runtime dependency'; exit 1
           fi
           mkdir -p "$RUNNER_TEMP/nextpad-home"
