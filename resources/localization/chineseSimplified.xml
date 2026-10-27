@@ -421,7 +421,10 @@ Translation note:
 					<Item id="11009" name="内容长度降序"/>
 					<Item id="11010" name="修改时间升序"/>
 					<Item id="11011" name="修改时间降序"/>
-				</Commands>
+					<Item id="42104" name="按行长度升序排序"/>
+				<Item id="42105" name="按行长度降序排序"/>
+				<Item id="42106" name="遮盖选中内容 █（Shift：●）"/>
+			</Commands>
 			</Main>
 			<TabBar>
 				<Item CMDID="41003" name="关闭"/>
@@ -1805,7 +1808,7 @@ Translation note:
 				<Item id="90372" name="工具栏组"/>
 				<Item id="90373" name="选择每个按钮在 Liquid Glass 工具栏中的显示位置：在"/>
 				<Item id="90374" name="按钮"/>
-				<Item id="90375" name="安置"/>
+				<Item id="90375" name="显示位置"/>
 				<Item id="90376" name="重置为默认值"/>
 				<Item id="90377" name="溢出菜单"/>
 				<Item id="90378" name="隐藏"/>
@@ -1879,6 +1882,96 @@ Translation note:
 				<Item id="90467" name="退出 Nextpad++"/>
 				<Item id="90468" name="保存当前录制的宏..."/>
 				<Item id="90469" name="修剪尾随空格并保存"/>
+				<Item id="90100" name="显示所有字符"/>
+				<Item id="90104" name="从磁盘重新加载"/>
+				<Item id="90114" name="可安装"/>
+				<Item id="90115" name="可更新"/>
+				<Item id="90116" name="已安装"/>
+				<Item id="90117" name="不兼容"/>
+				<Item id="90168" name="查找对话框使用等宽字体"/>
+				<Item id="90175" name="扩展（\n、\r、\t、\0、\x...）"/>
+				<Item id="90189" name="Windows (CRLF)"/>
+				<Item id="90191" name="插件列表仓库"/>
+				<Item id="90225" name="下次启动时恢复当前会话"/>
+				<Item id="90232" name="可更新"/>
+				<Item id="90257" name="扩展名"/>
+				<Item id="90262" name="在当前文档中查找"/>
+				<Item id="90263" name="在所有文档中查找"/>
+				<Item id="90264" name="在所有文档中替换"/>
+				<Item id="90265" name="查找：找不到文本“%@”"/>
+				<Item id="90298" name="重命名当前标签页"/>
+				<Item id="90300" name="重命名失败"/>
+				<Item id="90302" name="将“%@”移到废纸篓？"/>
+				<Item id="90303" name="关闭前保存“%@”？"/>
+				<Item id="90305" name="列选择模式提示"/>
+				<Item id="90310" name="编辑右键菜单"/>
+				<Item id="90320" name="保存对“%@”的更改？"/>
+				<Item id="90393" name="请重新启动 Nextpad++ 使更改生效。"/>
+				<Item id="90394" name="路径无效。"/>
+				<Item id="90396" name="选择 Nextpad++ 读取和保存设置的文件夹"/>
+				<Item id="90406" name="新建工作区"/>
+				<Item id="90407" name="打开工作区"/>
+				<Item id="90408" name="重新加载工作区"/>
+				<Item id="90409" name="添加新项目"/>
+				<Item id="90410" name="在项目中查找…"/>
+				<Item id="90412" name="上移"/>
+				<Item id="90413" name="下移"/>
+				<Item id="90414" name="添加文件夹"/>
+				<Item id="90415" name="添加文件…"/>
+				<Item id="90416" name="从文件夹添加文件…"/>
+				<Item id="90417" name="修改文件路径"/>
+				<Item id="90419" name="工作区"/>
+				<Item id="90421" name="在这些搜索结果中查找…"/>
+				<Item id="90422" name="复制选中行"/>
+				<Item id="90423" name="复制选中文件的路径"/>
+				<Item id="90424" name="打开选中文件"/>
+				<Item id="90425" name="长行自动换行"/>
+				<Item id="90426" name="每次搜索前清空结果"/>
+				<Item id="90470" name="所有插件按钮均已隐藏，因此工具条中不显示插件分组。"/>
+				<Item id="90471" name="未加载"/>
+				<Item id="90490" name="平滑（macOS 标准）"/>
+				<Item id="90491" name="不平滑"/>
+				<Item id="90492" name="不平滑，使用整像素间距"/>
+				<Item id="90480" name="无法保存自定义语言：%@"/>
+				<Item id="90481" name="已存在同名的自定义语言：%@"/>
+				<Item id="90482" name="此文件为只读：%@"/>
+				<Item id="90500" name="%@（已恢复）"/>
+				<Item id="91000" name="新建标签页"/>
+				<Item id="91001" name="关闭标签页"/>
+				<Item id="91002" name="关闭所有标签页"/>
+				<Item id="91003" name="垂直同步滚动"/>
+				<Item id="91004" name="水平同步滚动"/>
+				<Item id="91005" name="所有字符"/>
+				<Item id="91006" name="定义自定义语言"/>
+				<Item id="91007" name="文档地图"/>
+				<Item id="91008" name="文档列表"/>
+				<Item id="91009" name="函数列表"/>
+				<Item id="91010" name="字符面板"/>
+				<Item id="91011" name="剪贴板历史"/>
+				<Item id="91012" name="文件实时监控"/>
+				<Item id="91013" name="录制宏"/>
+				<Item id="91014" name="运行宏"/>
+				<Item id="91015" name="多次运行宏"/>
+				<Item id="91016" name="多次运行宏"/>
+				<Item id="91017" name="保存宏"/>
+				<Item id="91018" name="保存当前录制的宏"/>
+				<Item id="91019" name="标签页列表"/>
+				<Item id="91020" name="关闭当前标签页"/>
+				<Item id="91021" name="面板位置"/>
+				<Item id="91022" name="将侧边面板停靠在左侧"/>
+				<Item id="91023" name="在每一行的光标列插入文本"/>
+				<Item id="91024" name="停靠回主窗口"/>
+				<Item id="91025" name="分离为独立窗口"/>
+				<Item id="91026" name="将窗口置顶"/>
+				<Item id="91027" name="补零"/>
+				<Item id="91028" name="搜索…"/>
+				<Item id="91029" name="替换为…"/>
+				<Item id="91030" name="保存对“%@”的更改？"/>
+				<Item id="91031" name="大文件警告"/>
+				<Item id="91032" name="此文件已被其他程序修改。"/>
+				<Item id="91033" name="此文件已被其他程序修改。重新加载将放弃尚未保存的更改。"/>
+				<Item id="91034" name="例如 .$%-"/>
+				<Item id="91035" name="安装 nextpad++ 命令行工具…"/>
 			</MacStrings>
 		</Dialog>
 		<MessageBox>
@@ -2331,6 +2424,8 @@ C, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell
 			<max-len-on-save-tip value="您输入的内容过长，可能无法保存至下次会话。"/>
 			<goto-setting-tip value="在此处找到您的设置"/>
 			<tabbar-tabcompactlabellen-tip value="限制过长标签名的可见长度。输入以应用指定值。范围：1-257个字符（0表示禁用截断）。"/>
+			<find-status-invisible-chars-findWhat value="粘贴到“查找内容”或“替换为”中的文本含有不可见字符"/>
+			<find-status-invisible-chars-findWhat-tip value="警告：查找或替换输入框中存在不可见字符。粘贴的文本包含不可见字符（可能是换行符）；如果不删除，它们也会参与查找或替换。"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

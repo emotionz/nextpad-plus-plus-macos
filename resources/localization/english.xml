@@ -1936,6 +1936,42 @@ You can re-activate this dialog in Preferences later."/>
 				<Item id="90481" name="A user defined language with this name already exists: %@"/>
 				<Item id="90482" name="This file is read-only: %@"/>
 				<Item id="90500" name="%@ (recovered)"/>
+				<Item id="91000" name="New Tab"/>
+				<Item id="91001" name="Close Tab"/>
+				<Item id="91002" name="Close All Tabs"/>
+				<Item id="91003" name="Sync V"/>
+				<Item id="91004" name="Sync H"/>
+				<Item id="91005" name="All Chars"/>
+				<Item id="91006" name="Define Your Language"/>
+				<Item id="91007" name="Doc Map"/>
+				<Item id="91008" name="Doc List"/>
+				<Item id="91009" name="Func List"/>
+				<Item id="91010" name="Characters"/>
+				<Item id="91011" name="Clipboard"/>
+				<Item id="91012" name="Monitor"/>
+				<Item id="91013" name="Record"/>
+				<Item id="91014" name="Run Macro"/>
+				<Item id="91015" name="Run ×N"/>
+				<Item id="91016" name="Run Macro Multiple Times"/>
+				<Item id="91017" name="Save Mac"/>
+				<Item id="91018" name="Save Current Recorded Macro"/>
+				<Item id="91019" name="Tab List"/>
+				<Item id="91020" name="Close Active Tab"/>
+				<Item id="91021" name="Panel Placement"/>
+				<Item id="91022" name="Dock side panels on the left"/>
+				<Item id="91023" name="Insert text at caret column on each line"/>
+				<Item id="91024" name="Dock back"/>
+				<Item id="91025" name="Detach"/>
+				<Item id="91026" name="Pin window on top"/>
+				<Item id="91027" name="Zeros"/>
+				<Item id="91028" name="Search…"/>
+				<Item id="91029" name="Replace with…"/>
+				<Item id="91030" name='Save changes to "%@"?'/>
+				<Item id="91031" name="Large File Warning"/>
+				<Item id="91032" name="This file was modified by another program."/>
+				<Item id="91033" name="This file was modified by another program. Reloading will discard your unsaved changes."/>
+				<Item id="91034" name="e.g. .$%-"/>
+				<Item id="91035" name="Install nextpad++ Command Line Tool…"/>
 			</MacStrings>
 		</Dialog>
 		<MessageBox>
