@@ -6,6 +6,9 @@
 // SCI_OWNREGEX implementation).
 #import "../regex/NppRegexSearch.h"
 
+NSNotificationName const NPPOverviewSearchChangedNotification = @"NPPOverviewSearchChangedNotification";
+static NPPFindOptions *overviewSearchOptions;
+
 // Per-operation regex flag bundles. Mirrors Windows FindReplaceDlg.cpp:3000-3014
 // FINDNEXTTYPE_* matrix:
 //   - Single Find Next  → EMPTYMATCH_ALL (allow empty matches anywhere)
@@ -109,6 +112,19 @@ static NSString *nppRegexReplacement(NSString *replacement,
 
 @implementation SearchEngine
 
++ (void)setOverviewSearchOptions:(NPPFindOptions *)options {
+    if (overviewSearchOptions &&
+        [overviewSearchOptions.searchText isEqualToString:options.searchText] &&
+        overviewSearchOptions.matchCase == options.matchCase &&
+        overviewSearchOptions.wholeWord == options.wholeWord &&
+        overviewSearchOptions.searchType == options.searchType &&
+        overviewSearchOptions.dotMatchesNewline == options.dotMatchesNewline) return;
+    overviewSearchOptions = [options copy];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NPPOverviewSearchChangedNotification object:nil];
+}
+
++ (NPPFindOptions *)overviewSearchOptions { return [overviewSearchOptions copy]; }
+
 #pragma mark - Extended string expansion
 
 + (NSString *)expandExtendedString:(NSString *)input {
@@ -180,6 +196,7 @@ static NSString *nppRegexReplacement(NSString *replacement,
 #pragma mark - Find
 
 + (BOOL)findInView:(ScintillaView *)sci options:(NPPFindOptions *)opts forward:(BOOL)forward {
+    [self setOverviewSearchOptions:opts];
     if (!opts.searchText.length) return NO;
 
     const char *needle = [self preparedNeedle:opts];
@@ -412,6 +429,7 @@ static NSString *nppRegexReplacement(NSString *replacement,
 #pragma mark - Count
 
 + (NSInteger)countInView:(ScintillaView *)sci options:(NPPFindOptions *)opts {
+    [self setOverviewSearchOptions:opts];
     if (!opts.searchText.length) return 0;
 
     const char *needle = [self preparedNeedle:opts];
@@ -441,6 +459,7 @@ static NSString *nppRegexReplacement(NSString *replacement,
 + (NSArray<NPPSearchResult *> *)findAllInView:(ScintillaView *)sci
                                      filePath:(NSString *)path
                                       options:(NPPFindOptions *)opts {
+    [self setOverviewSearchOptions:opts];
     if (!opts.searchText.length) return @[];
 
     const char *needle = [self preparedNeedle:opts];
@@ -491,6 +510,7 @@ static NSString *nppRegexReplacement(NSString *replacement,
 #pragma mark - Mark All
 
 + (NSInteger)markAllInView:(ScintillaView *)sci options:(NPPFindOptions *)opts {
+    [self setOverviewSearchOptions:opts];
     if (!opts.searchText.length) return 0;
 
     const char *needle = [self preparedNeedle:opts];

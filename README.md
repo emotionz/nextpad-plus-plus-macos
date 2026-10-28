@@ -97,6 +97,22 @@ brew install --cask nextpad++
 
 ## FAQ
 
+### Document Map navigation
+
+Open **View → Document Map** (or use the Document Map toolbar button) to show a
+syntax-colored miniature of the current document. Click the miniature to scroll
+to that code, drag the translucent viewport to move through the document, or use
+the mouse wheel over the map.
+
+The narrow track on its right shows search matches across the entire file, even
+when only part of a long document fits in the miniature. Matches are teal; the
+currently selected match is orange. Click a match marker to select and reveal it.
+For dense searches, the map keeps up to 19,999 precise text highlights and
+summarizes later matches in the track.
+The map follows the latest Find/Replace or incremental-search query, including
+case, whole-word, extended and regular-expression options. Clearing the query
+clears its markers. Search updates are debounced and processed in batches.
+
 ### Is this the "real" Notepad++ for Mac?
 
 Nextpad++ for macOS is a native port of the actual Notepad++ codebase, running directly on macOS as a first-class native application. It is not a knockoff, a Wine wrapper, or a new editor that imitates Notepad++.

@@ -30,6 +30,9 @@ static const CGFloat kLeftM     = 30;    // left margin for checkboxes
 static const CGFloat kLabelR    = 140;   // right edge of "Find what:" label
 static const CGFloat kFieldL    = 145;   // left edge of combo boxes
 static const CGFloat kFieldR    = 410;   // right edge of combo boxes (from left)
+static const CGFloat kDirButtonW = 36;
+static const CGFloat kDirGap     = 8;
+static const CGFloat kDirFieldR  = kFieldR - 2 * (kDirButtonW + kDirGap);
 // Button width: computed in +initialize so "Find All in All Opened" fits on one line
 // and "Documents" wraps to the next line.
 static CGFloat kBtnW = 200;
@@ -153,7 +156,10 @@ static FindWindow *_sharedInstance = nil;
 - (NSString *)searchText { return _findCombo.stringValue ?: @""; }
 
 - (void)setSearchText:(NSString *)text {
-    if (text.length) _findCombo.stringValue = text;
+    if (text.length) {
+        _findCombo.stringValue = text;
+        [self _overviewSearchChanged:nil];
+    }
 }
 
 - (void)setDirectory:(NSString *)path {
@@ -483,6 +489,23 @@ static void _placeChk(NSView *parent, NSButton *chk, CGFloat x, CGFloat y) {
     [self _buildFindInFilesTab];
     [self _buildFindInProjectsTab];
     [self _buildMarkTab];
+
+    // Keep the document-map query live while editing search options.
+    for (NSView *view : _views) {
+        for (NSView *child in view.subviews) {
+            if ([child isKindOfClass:[NSButton class]]) {
+                NSButton *button = (NSButton *)child;
+                if (!button.action) {
+                    button.target = self;
+                    button.action = @selector(_overviewSearchChanged:);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        _smDotNL[i].target = self;
+        _smDotNL[i].action = @selector(_overviewSearchChanged:);
+    }
 }
 
 /// Anchor Y offset from top of content view. Since we use flipped-like placement
@@ -529,6 +552,11 @@ static CGFloat _fromTop(NSView *container, CGFloat topOffset, CGFloat height) {
     _placeChk(v, _frWholeWord, kLeftM, chkY - 22);
     _placeChk(v, _frMatchCase, kLeftM, chkY - 44);
     _placeChk(v, _frWrapAround,kLeftM, chkY - 66);
+    objc_setAssociatedObject(v, "backward", _frBackward, OBJC_ASSOCIATION_RETAIN);
+    objc_setAssociatedObject(v, "wholeword", _frWholeWord, OBJC_ASSOCIATION_RETAIN);
+    objc_setAssociatedObject(v, "matchcase", _frMatchCase, OBJC_ASSOCIATION_RETAIN);
+    objc_setAssociatedObject(v, "wraparound", _frWrapAround, OBJC_ASSOCIATION_RETAIN);
+    objc_setAssociatedObject(v, "inselection", _frInSelection, OBJC_ASSOCIATION_RETAIN);
 
     // Search Mode group box
     [self _buildSearchModeGroup:0 inView:v atY:chkY - 166];
@@ -557,6 +585,7 @@ static CGFloat _fromTop(NSView *container, CGFloat topOffset, CGFloat height) {
     // "In selection"
     _frInSelection = _mkChk([[NppLocalizer shared] translate:@"In selection"]);
     _placeChk(v, _frInSelection, kFieldR - 90, H - 92);
+    objc_setAssociatedObject(v, "inselection", _frInSelection, OBJC_ASSOCIATION_RETAIN);
 
     // Buttons
     _placeBtn(v, _mkBtn([[NppLocalizer shared] translate:@"Find Next"],                            @selector(_findNext:), self),        H - 34);
@@ -614,14 +643,16 @@ static CGFloat _fromTop(NSView *container, CGFloat topOffset, CGFloat height) {
     _placeFieldRow(v, _mkLabel([[NppLocalizer shared] translate:@"Find what:"]),    _findCombo,      H - 30, kLabelR, kFieldL, kFieldR);
     _placeFieldRow(v, _mkLabel([[NppLocalizer shared] translate:@"Replace with:"]), _replaceCombo,   H - 62, kLabelR, kFieldL, kFieldR);
     _placeFieldRow(v, _mkLabel([[NppLocalizer shared] translate:@"Filters:"]),      _filtersCombo,   H - 94, kLabelR, kFieldL, kFieldR);
-    _placeFieldRow(v, _mkLabel([[NppLocalizer shared] translate:@"Directory:"]),    _directoryCombo, H -126, kLabelR, kFieldL, kFieldR - 70);
+    _placeFieldRow(v, _mkLabel([[NppLocalizer shared] translate:@"Directory:"]),    _directoryCombo, H -126, kLabelR, kFieldL, kDirFieldR);
 
     // Browse & fill buttons next to directory
     NSButton *browseBtn = _mkBtn(@"...", @selector(_browseDir:), self);
-    browseBtn.frame = NSMakeRect(kFieldR - 78, H - 131, 30, 24);
+    browseBtn.translatesAutoresizingMaskIntoConstraints = YES;
+    browseBtn.frame = NSMakeRect(kDirFieldR + kDirGap, H - 126, kDirButtonW, 24);
     [v addSubview:browseBtn];
     NSButton *fillBtn = _mkBtn(@"<<", @selector(_fillDirFromDoc:), self);
-    fillBtn.frame = NSMakeRect(kFieldR - 45, H - 131, 30, 24);
+    fillBtn.translatesAutoresizingMaskIntoConstraints = YES;
+    fillBtn.frame = NSMakeRect(kFieldR - kDirButtonW, H - 126, kDirButtonW, 24);
     [v addSubview:fillBtn];
 
     // Buttons
@@ -779,21 +810,20 @@ static CGFloat _fromTop(NSView *container, CGFloat topOffset, CGFloat height) {
     }
     if (tab == FindWindowTabFindInFiles) {
         [tv addSubview:_directoryCombo];
-        _directoryCombo.frame = NSMakeRect(kFieldL, H - 126, kFieldR - kFieldL - 70, 24);
+        _directoryCombo.frame = NSMakeRect(kFieldL, H - 126, kDirFieldR - kFieldL, 24);
     }
 
     // Point _fr* to the correct tab's checkboxes for Find/Replace
-    if (tab == FindWindowTabFind) {
-        // _fr* already point to Find tab's controls (set in _buildFindTab)
-    } else if (tab == FindWindowTabReplace) {
-        // Point to Replace tab's copies
+    if (tab == FindWindowTabFind || tab == FindWindowTabReplace) {
         _frBackward  = objc_getAssociatedObject(tv, "backward");
         _frWholeWord = objc_getAssociatedObject(tv, "wholeword");
         _frMatchCase = objc_getAssociatedObject(tv, "matchcase");
         _frWrapAround = objc_getAssociatedObject(tv, "wraparound");
+        _frInSelection = objc_getAssociatedObject(tv, "inselection");
     }
 
     _statusLabel.stringValue = @"";
+    [self _overviewSearchChanged:nil];
 }
 
 #pragma mark - Status
@@ -851,6 +881,21 @@ static CGFloat _fromTop(NSView *container, CGFloat topOffset, CGFloat height) {
         if (_smDotNL[i] && _smRegex[i])
             _smDotNL[i].enabled = (_smRegex[i].state == NSControlStateValueOn);
     }
+    [self _overviewSearchChanged:sender];
+}
+
+- (void)_overviewSearchChanged:(id)sender {
+    [SearchEngine setOverviewSearchOptions:[self currentOptions]];
+}
+
+- (void)controlTextDidChange:(NSNotification *)note {
+    if (note.object == _findCombo) [self _overviewSearchChanged:nil];
+}
+
+- (void)comboBoxSelectionDidChange:(NSNotification *)note {
+    if (note.object != _findCombo) return;
+    // NSComboBox commits its selected history value after this delegate callback.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self _overviewSearchChanged:nil]; });
 }
 
 #pragma mark - Actions: Find

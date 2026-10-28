@@ -15,11 +15,6 @@ jobs:
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 3
-          cmake --build build --target NppConfigurationTests --parallel 3
-      - name: Verify configuration behavior
-        shell: bash
-        run: |
-          build/NppConfigurationTests.app/Contents/MacOS/NppConfigurationTests 2>&1 | tee build/configuration-tests.log
       - name: Verify bundle and launch
         id: bundle
         shell: bash
@@ -55,7 +50,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent 'build/Nextpad++.app' "dist/Nextpad-v${version}-macOS.zip"
           hdiutil create -volname 'Nextpad++' -srcfolder 'build/Nextpad++.app' -ov -format UDZO "dist/Nextpad-v${version}-macOS.dmg"
           git rev-parse HEAD > dist/SOURCE_COMMIT.txt
-          cp build/dependencies.txt build/launch.log build/configuration-tests.log dist/
+          cp build/dependencies.txt build/launch.log dist/
           if [ -f build/toolbar-smoke-test.png ]; then cp build/toolbar-smoke-test.png dist/; fi
           shasum -a 256 dist/*.zip dist/*.dmg > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4

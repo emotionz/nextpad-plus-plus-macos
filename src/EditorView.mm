@@ -25,6 +25,7 @@
 #include <vector>
 
 NSNotificationName const EditorViewCursorDidMoveNotification = @"EditorViewCursorDidMoveNotification";
+NSNotificationName const EditorViewDocumentDidChangeNotification = @"EditorViewDocumentDidChangeNotification";
 NSNotificationName const EditorViewDidGainFocusNotification  = @"EditorViewDidGainFocusNotification";
 NSNotificationName const EditorViewDidSaveNotification        = @"EditorViewDidSaveNotification";
 NSNotificationName const EditorViewDidScrollNotification = @"EditorViewDidScrollNotification";
@@ -487,7 +488,9 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
 
     // Use memory-mapped I/O for large files — OS pages in only what's needed.
     NSDataReadingOptions readOpts = large ? NSDataReadingMappedIfSafe : 0;
-    NSData *rawData = [NSData dataWithContentsOfFile:path
+    // BOM slices below borrow these bytes; keep the mapped owner alive until
+    // SCI_ADDTEXT has copied the payload into the Scintilla document.
+    __attribute__((objc_precise_lifetime)) NSData *rawData = [NSData dataWithContentsOfFile:path
                                              options:readOpts
                                                error:error];
     if (!rawData) return NO;
@@ -502,15 +505,18 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
     if (len >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) {
         enc = NSUTF8StringEncoding;
         hasBOM = YES;
-        textData = [rawData subdataWithRange:NSMakeRange(3, len - 3)];
+        textData = [NSData dataWithBytesNoCopy:(void *)(b + 3)
+                                        length:len - 3 freeWhenDone:NO];
     } else if (len >= 2 && b[0] == 0xFF && b[1] == 0xFE) {
         enc = NSUTF16LittleEndianStringEncoding;
         hasBOM = YES;
-        textData = [rawData subdataWithRange:NSMakeRange(2, len - 2)];
+        textData = [NSData dataWithBytesNoCopy:(void *)(b + 2)
+                                        length:len - 2 freeWhenDone:NO];
     } else if (len >= 2 && b[0] == 0xFE && b[1] == 0xFF) {
         enc = NSUTF16BigEndianStringEncoding;
         hasBOM = YES;
-        textData = [rawData subdataWithRange:NSMakeRange(2, len - 2)];
+        textData = [NSData dataWithBytesNoCopy:(void *)(b + 2)
+                                        length:len - 2 freeWhenDone:NO];
     }
 
     // ── Convert to UTF-8 bytes for Scintilla (Phase 2 optimised) ─────────────
@@ -551,7 +557,8 @@ static int nppDetectEOLMode(const char *bytes, NSUInteger len) {
             // Slide the head probe end backwards off any UTF-8 continuation
             // byte (10xxxxxx) so we never falsely fail on a sliced sequence.
             NSUInteger headEnd = probeLen;
-            while (headEnd > 0 && (b[headEnd] & 0xC0) == 0x80) headEnd--;
+            while (headEnd < len && headEnd > 0 &&
+                   (b[headEnd] & 0xC0) == 0x80) headEnd--;
             NSData *headProbe = [rawData subdataWithRange:NSMakeRange(0, headEnd)];
             BOOL headValid = ([[NSString alloc] initWithData:headProbe
                                                     encoding:NSUTF8StringEncoding] != nil);
@@ -3793,6 +3800,10 @@ static const int kHistoryMask = (1 << SC_MARKNUM_HISTORY_MODIFIED);
 #pragma mark - Incremental Search (highlight all matches)
 
 - (void)highlightAllMatches:(NSString *)text matchCase:(BOOL)mc {
+    NPPFindOptions *options = [[NPPFindOptions alloc] init];
+    options.searchText = text ?: @"";
+    options.matchCase = mc;
+    [SearchEngine setOverviewSearchOptions:options];
     ScintillaView *sci = _scintillaView;
     // Clear previous incremental search highlights
     [sci message:SCI_SETINDICATORCURRENT wParam:kIndicatorIncSearch];
@@ -3825,6 +3836,7 @@ static const int kHistoryMask = (1 << SC_MARKNUM_HISTORY_MODIFIED);
 }
 
 - (void)clearIncrementalSearchHighlights {
+    [SearchEngine setOverviewSearchOptions:[[NPPFindOptions alloc] init]];
     ScintillaView *sci = _scintillaView;
     [sci message:SCI_SETINDICATORCURRENT wParam:kIndicatorIncSearch];
     [sci message:SCI_INDICATORCLEARRANGE wParam:0 lParam:[sci message:SCI_GETLENGTH]];
@@ -4805,6 +4817,8 @@ static NSSet<NSString *> *_cLikeLanguages() {
                 _isModified = YES;
                 // Sync clone sibling's modified state (shared document).
                 if (_cloneSibling) _cloneSibling->_isModified = YES;
+                [[NSNotificationCenter defaultCenter]
+                    postNotificationName:EditorViewDocumentDidChangeNotification object:self];
                 // When whitespace display is active, newly inserted characters may not
                 // get their whitespace symbols drawn by Scintilla's incremental update.
                 // Queuing a full redraw ensures tab arrows / space dots appear immediately.

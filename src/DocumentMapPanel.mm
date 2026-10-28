@@ -5,6 +5,18 @@
 #import "NppThemeManager.h"
 #import "StyleConfiguratorWindowController.h"
 #import "TabManager.h"
+#import "SearchEngine.h"
+#import "DocumentMapGeometry.h"
+#import "../regex/NppRegexSearch.h"
+#include <vector>
+
+static const CGFloat kDMRulerWidth = 14;
+static const size_t kDMMatchLimit = 19999;
+static const size_t kDMRulerBuckets = 2048;
+static const sptr_t kDMSearchWindow = 256 * 1024;
+struct DMMatch {
+    sptr_t start, end, line, endLine;
+};
 
 // The map shares the tracked editor's Scintilla document (SCI_SETDOCPOINTER),
 // so it must never take keyboard focus: SCI_SETREADONLY is a document
@@ -40,6 +52,8 @@
 - (void)_overlayMouseDown:(NSPoint)pt;
 - (void)_overlayMouseDragged:(NSPoint)pt;
 - (void)_overlayScrollWheel:(NSEvent *)event;
+- (void)_drawSearchMarks;
+- (void)_scanSearchBatch;
 @end
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,9 +69,11 @@
 
 - (void)drawRect:(NSRect)dirty {
     NSRect vr = [self.panel _viewportRectForOverlay:self];
-    if (NSIsEmptyRect(vr)) return;
-    [[self.panel _viewportColor] setFill];
-    [NSBezierPath fillRect:vr];
+    if (!NSIsEmptyRect(vr)) {
+        [[self.panel _viewportColor] setFill];
+        [NSBezierPath fillRect:vr];
+    }
+    [self.panel _drawSearchMarks];
 }
 
 - (void)mouseDown:(NSEvent *)e {
@@ -84,7 +100,16 @@
     __weak EditorView  *_trackedEditor;
     NSTimer            *_contentDebounce;
     NSColor            *_viewportColor; // theme-derived; see -_applyChromeForBackground:
-    CGFloat             _grabOffset;   // fromTop offset from mouse to rect center at mouseDown
+    CGFloat             _dragStartY, _dragTrackHeight;
+    sptr_t              _dragStartFirst;
+    BOOL                _draggingRuler;
+    std::vector<DMMatch> _matches;
+    std::vector<DMMatch> _rulerMatches;
+    NPPFindOptions     *_searchOptions;
+    NSData             *_searchNeedle;
+    NSTimer            *_searchTimer;
+    sptr_t              _searchPosition;
+    BOOL                _searchFinished;
 }
 
 // ── Init / dealloc ────────────────────────────────────────────────────────────
@@ -96,6 +121,12 @@
         [[NSNotificationCenter defaultCenter]
             addObserver:self selector:@selector(_cursorMoved:)
                    name:EditorViewCursorDidMoveNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:self selector:@selector(_documentChanged:)
+                   name:EditorViewDocumentDidChangeNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:self selector:@selector(_searchChanged:)
+                   name:NPPOverviewSearchChangedNotification object:nil];
         [[NSNotificationCenter defaultCenter]
             addObserver:self selector:@selector(_prefsChanged:)
                    name:@"NPPPreferencesChanged" object:nil];
@@ -112,6 +143,7 @@
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [_contentDebounce invalidate];
+    [_searchTimer invalidate];
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -123,7 +155,7 @@
     [NSLayoutConstraint activateConstraints:@[
         [_mapSci.topAnchor      constraintEqualToAnchor:self.topAnchor],
         [_mapSci.leadingAnchor  constraintEqualToAnchor:self.leadingAnchor],
-        [_mapSci.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [_mapSci.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-kDMRulerWidth],
         [_mapSci.bottomAnchor   constraintEqualToAnchor:self.bottomAnchor],
     ]];
     [self _configureMapSci];
@@ -220,10 +252,12 @@
 // This only re-attaches when the editor swapped documents (file load/reload
 // creates a fresh document) and refreshes the per-view style colours.
 - (void)_updateMapContent {
+    sptr_t previousDoc = _mapDoc;
     [self _syncDocument];
     [self _applyThemeFromEditor:_trackedEditor];
     [self _syncScroll];
     [_overlay setNeedsDisplay:YES];
+    if (previousDoc != _mapDoc) [self _restartSearch];
 }
 
 - (void)_syncDocument {
@@ -299,147 +333,259 @@ static sptr_t _dmBGRFromColor(NSColor *c) {
     return _viewportColor;
 }
 
-// ── Scroll sync (proportional — immediate on every cursor/scroll event) ───────
-//
-// Proportional strategy: src at p% of scrollable range → map at p%.
-// This lets the viewport rect reach the very top and bottom of the panel.
+// ── Viewport and scrolling ──────────────────────────────────────────────────
+
+- (sptr_t)_totalDisplayLines {
+    ScintillaView *src = _trackedEditor.scintillaView;
+    sptr_t last = MAX((sptr_t)0, [src message:SCI_GETLINECOUNT] - 1);
+    sptr_t lastHeight = [src message:SCI_GETLINEVISIBLE wParam:last] ?
+        [src message:SCI_WRAPCOUNT wParam:last] : 0;
+    return MAX((sptr_t)1, [src message:SCI_VISIBLEFROMDOCLINE wParam:last] + lastHeight);
+}
+
+- (sptr_t)_maxFirstDisplayLine {
+    return MAX((sptr_t)0, [self _totalDisplayLines] -
+               MAX((sptr_t)1, [_trackedEditor.scintillaView message:SCI_LINESONSCREEN]));
+}
+
+- (DocumentMap::Viewport)_mapViewport {
+    ScintillaView *src = _trackedEditor.scintillaView;
+    sptr_t first = [src message:SCI_GETFIRSTVISIBLELINE];
+    sptr_t visible = MAX((sptr_t)1, [src message:SCI_LINESONSCREEN]);
+    sptr_t firstDoc = [src message:SCI_DOCLINEFROMVISIBLE wParam:first];
+    sptr_t lastDoc = [src message:SCI_DOCLINEFROMVISIBLE
+                          wParam:MIN([self _totalDisplayLines] - 1, first + visible - 1)];
+    sptr_t maxFirst = [self _maxFirstDisplayLine];
+    return DocumentMap::viewport([src message:SCI_GETLINECOUNT], firstDoc, lastDoc + 1,
+        maxFirst ? (double)first / maxFirst : 0,
+        MAX((sptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]), _overlay.bounds.size.height);
+}
 
 - (void)_syncScroll {
-    EditorView *ed = _trackedEditor;
-    if (!ed) return;
-
-    intptr_t srcFirst   = [ed.scintillaView message:SCI_GETFIRSTVISIBLELINE];
-    intptr_t srcVisible = MAX((intptr_t)1, [ed.scintillaView message:SCI_LINESONSCREEN]);
-    intptr_t srcTotal   = MAX((intptr_t)1, [ed.scintillaView message:SCI_GETLINECOUNT]);
-    intptr_t mapTotal   = MAX((intptr_t)1, [_mapSci message:SCI_GETLINECOUNT]);
-    intptr_t mapLineH   = MAX((intptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]);
-    intptr_t panelH     = MAX((intptr_t)1, (intptr_t)_mapSci.bounds.size.height);
-    intptr_t mapVisLines = panelH / mapLineH;
-
-    intptr_t maxSrcFirst = MAX((intptr_t)1, srcTotal - srcVisible);
-    intptr_t maxMapFirst = MAX((intptr_t)0, mapTotal - mapVisLines);
-
-    CGFloat p = (CGFloat)srcFirst / (CGFloat)maxSrcFirst;
-    p = MAX(0.0f, MIN(1.0f, p));
-    intptr_t newFirst = (intptr_t)(p * (CGFloat)maxMapFirst + 0.5f);
-    newFirst = MAX((intptr_t)0, MIN(maxMapFirst, newFirst));
-
-    intptr_t curFirst = [_mapSci message:SCI_GETFIRSTVISIBLELINE];
-    if (newFirst != curFirst)
-        [_mapSci message:SCI_SETFIRSTVISIBLELINE wParam:(uptr_t)newFirst];
-
+    if (!_trackedEditor) return;
+    auto viewport = [self _mapViewport];
+    if ([_mapSci message:SCI_GETFIRSTVISIBLELINE] != viewport.firstMapLine)
+        [_mapSci message:SCI_SETFIRSTVISIBLELINE wParam:viewport.firstMapLine];
     [_overlay setNeedsDisplay:YES];
 }
 
-// ── Viewport rectangle ────────────────────────────────────────────────────────
-//
-// The rect is 50% of the viewport-band height. It slides within the band:
-// aligned to the band's top at the document start, bottom at document end.
-// This guarantees the rect reaches both edges of the panel.
-//
-// The rect center is a LINEAR function of srcFirst:
-//   center_fromTop(srcFirst) = srcFirst * K + rectH/2
-//   K = [(maxSrcFirst - maxMapFirst)*mapLineH + (bandH - rectH)] / maxSrcFirst
-//
-// This linearity is exploited in _dragToFromTop: to compute the exact srcFirst
-// for any target mouse position — giving true 1:1 mouse tracking.
-
-- (NSRect)_viewportRectForOverlay:(_DMViewportOverlay *)overlay {
-    EditorView *ed = _trackedEditor;
-    if (!ed) return NSZeroRect;
-
-    intptr_t srcFirst   = [ed.scintillaView message:SCI_GETFIRSTVISIBLELINE];
-    intptr_t srcVisible = MAX((intptr_t)1, [ed.scintillaView message:SCI_LINESONSCREEN]);
-    intptr_t srcTotal   = MAX((intptr_t)1, [ed.scintillaView message:SCI_GETLINECOUNT]);
-    intptr_t mapFirst   = [_mapSci message:SCI_GETFIRSTVISIBLELINE];
-    intptr_t mapTotal   = MAX((intptr_t)1, [_mapSci message:SCI_GETLINECOUNT]);
-    intptr_t mapLineH   = MAX((intptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]);
-
-    // Pixel positions of the viewport band measured from the top of the map content.
-    intptr_t mapVpStart = (srcFirst * mapTotal) / srcTotal;
-    intptr_t mapVpEnd   = MIN(mapTotal, ((srcFirst + srcVisible) * mapTotal) / srcTotal + 1);
-    CGFloat pixTop  = (CGFloat)(mapVpStart - mapFirst) * (CGFloat)mapLineH;
-    CGFloat pixBtm  = (CGFloat)(mapVpEnd   - mapFirst) * (CGFloat)mapLineH;
-    CGFloat bandH   = MAX(4.0f, pixBtm - pixTop);
-    CGFloat rectH   = bandH * 0.5f;   // 50% of the viewport band
-
-    // Slide: p=0 → rect at band top; p=1 → rect at band bottom.
-    intptr_t maxSrcFirst = MAX((intptr_t)1, srcTotal - srcVisible);
-    CGFloat p = MAX(0.0f, MIN(1.0f, (CGFloat)srcFirst / (CGFloat)maxSrcFirst));
-    CGFloat pixRectTop = pixTop + p * (bandH - rectH);
-    CGFloat pixRectBtm = pixRectTop + rectH;
-
-    // Convert from top-origin pixel coords to AppKit (bottom-origin).
-    CGFloat h     = overlay.bounds.size.height;
-    CGFloat w     = overlay.bounds.size.width;
-    CGFloat rectY = h - pixRectBtm;
-
-    if (rectY < 0)          { rectH += rectY; rectY = 0; }
-    if (rectH < 2)            rectH = 2;
-    if (rectY + rectH > h)    rectH = h - rectY;
-    if (rectH <= 0)           return NSZeroRect;
-
-    return NSMakeRect(0, rectY, w, rectH);
+- (void)layout {
+    [super layout];
+    [self _syncScroll];
 }
 
-// ── Mouse handling ────────────────────────────────────────────────────────────
-//
-// On mouseDown: if the click lands on the rect, record the grab offset so the
-// grabbed point tracks the mouse exactly. If outside the rect, snap the rect
-// center to the mouse (grabOffset = 0).
-//
-// On drag: _dragToFromTop: inverts the linear rect-center formula to compute
-// the exact srcFirst that places the rect center at the target position.
-// Result: 1:1 pixel tracking regardless of document size or panel height.
+- (NSRect)_viewportRectForOverlay:(_DMViewportOverlay *)overlay {
+    if (!_trackedEditor) return NSZeroRect;
+    auto viewport = [self _mapViewport];
+    return NSMakeRect(0, overlay.bounds.size.height - viewport.top - viewport.height,
+                      MAX(0, overlay.bounds.size.width - kDMRulerWidth), viewport.height);
+}
+
+// ── Live search (the map has independent search targets on the shared document) ──
+
+- (void)_restartSearch {
+    [_searchTimer invalidate];
+    _searchTimer = nil;
+    _matches.clear();
+    _rulerMatches.assign(kDMRulerBuckets, {-1, -1, -1, -1});
+    _searchPosition = 0;
+    _searchFinished = NO;
+    _searchOptions = [SearchEngine overviewSearchOptions];
+    [_overlay setNeedsDisplay:YES];
+    if (!_trackedEditor || !_searchOptions.searchText.length) return;
+    NSString *needle = _searchOptions.searchType == NPPSearchExtended
+        ? [SearchEngine expandExtendedString:_searchOptions.searchText] : _searchOptions.searchText;
+    _searchNeedle = [needle dataUsingEncoding:NSUTF8StringEncoding];
+    if (!_searchNeedle.length) return;
+    int flags = [SearchEngine scintillaFlagsForOptions:_searchOptions];
+    if (_searchOptions.searchType == NPPSearchRegex)
+        flags |= SCFIND_REGEXP_EMPTYMATCH_NOTAFTERMATCH | SCFIND_REGEXP_SKIPCRLFASONE;
+    [_mapSci message:SCI_SETSEARCHFLAGS wParam:flags];
+    __weak typeof(self) weakSelf = self;
+    _searchTimer = [NSTimer scheduledTimerWithTimeInterval:0.01 repeats:YES block:^(NSTimer *timer) {
+        [weakSelf _scanSearchBatch];
+    }];
+    // Coalesce typing and edits; subsequent batches yield to the event loop.
+    _searchTimer.fireDate = [NSDate dateWithTimeIntervalSinceNow:0.15];
+}
+
+- (void)_scanSearchBatch {
+    sptr_t length = [_mapSci message:SCI_GETLENGTH];
+    sptr_t totalLines = MAX((sptr_t)1, [_mapSci message:SCI_GETLINECOUNT]);
+    CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + 0.006;
+    int count = 0;
+    while (!_searchFinished && count++ < 200 && CFAbsoluteTimeGetCurrent() < deadline) {
+        // Literal searches use bounded targets. Regex keeps the full target:
+        // an arbitrary multiline expression has no safe fixed overlap.
+        sptr_t window = _searchOptions.searchType == NPPSearchRegex ? length :
+            MAX(kDMSearchWindow, (sptr_t)_searchNeedle.length * 2 + 16);
+        sptr_t endOfWindow = MIN(length, _searchPosition + window);
+        [_mapSci message:SCI_SETTARGETRANGE wParam:_searchPosition lParam:endOfWindow];
+        sptr_t found = [_mapSci message:SCI_SEARCHINTARGET wParam:_searchNeedle.length
+                                lParam:(sptr_t)_searchNeedle.bytes];
+        if (found < 0) {
+            if (endOfWindow == length) { _searchFinished = YES; break; }
+            sptr_t overlap = MIN(window / 2, (sptr_t)_searchNeedle.length + 8);
+            _searchPosition = endOfWindow - overlap;
+            continue;
+        }
+        sptr_t end = [_mapSci message:SCI_GETTARGETEND];
+        DMMatch match = {found, end,
+            [_mapSci message:SCI_LINEFROMPOSITION wParam:found],
+            [_mapSci message:SCI_LINEFROMPOSITION wParam:MAX(found, end - 1)]};
+        if (_matches.size() < kDMMatchLimit) _matches.push_back(match);
+        size_t bucket = MIN(kDMRulerBuckets - 1,
+            (size_t)((double)match.line / totalLines * kDMRulerBuckets));
+        if (_rulerMatches[bucket].start < 0) _rulerMatches[bucket] = match;
+        if (end > found) _searchPosition = end;
+        else if (found < length) _searchPosition = [_mapSci message:SCI_POSITIONAFTER wParam:found];
+        else _searchFinished = YES;
+        // Once precise highlights are full, one result per ruler bucket is
+        // sufficient. Skip the rest of a dense bucket instead of visiting
+        // millions of identical hits on the main thread.
+        if (_matches.size() == kDMMatchLimit) {
+            if (bucket + 1 == kDMRulerBuckets) _searchFinished = YES;
+            else {
+                sptr_t nextLine = (sptr_t)ceil((double)(bucket + 1) * totalLines / kDMRulerBuckets);
+                sptr_t nextPosition = [_mapSci message:SCI_POSITIONFROMLINE wParam:nextLine];
+                if (nextPosition > _searchPosition) _searchPosition = nextPosition;
+            }
+        }
+    }
+    if (_searchFinished) { [_searchTimer invalidate]; _searchTimer = nil; }
+    [_overlay setNeedsDisplay:YES];
+}
+
+- (BOOL)_isCurrentMatch:(const DMMatch &)match {
+    ScintillaView *src = _trackedEditor.scintillaView;
+    return [src message:SCI_GETSELECTIONSTART] == match.start &&
+           [src message:SCI_GETSELECTIONEND] == match.end;
+}
+
+- (NSRect)_rulerThumbRect {
+    CGFloat height = _overlay.bounds.size.height;
+    ScintillaView *src = _trackedEditor.scintillaView;
+    CGFloat thumbH = MIN(height, MAX(18.0, height * [src message:SCI_LINESONSCREEN] /
+                                   MAX((sptr_t)1, [self _totalDisplayLines])));
+    CGFloat progress = [self _maxFirstDisplayLine] ?
+        (CGFloat)[src message:SCI_GETFIRSTVISIBLELINE] / [self _maxFirstDisplayLine] : 0;
+    return NSMakeRect(_overlay.bounds.size.width - kDMRulerWidth,
+        (height - thumbH) * (1 - MIN(1.0, progress)), kDMRulerWidth, thumbH);
+}
+
+- (void)_drawSearchMarks {
+    CGFloat height = _overlay.bounds.size.height;
+    CGFloat width = _overlay.bounds.size.width;
+    if (height <= 0 || width <= kDMRulerWidth) return;
+    CGFloat rulerX = width - kDMRulerWidth;
+    NSColor *bg = _dmColorFromBGR([_mapSci message:SCI_STYLEGETBACK wParam:STYLE_DEFAULT]);
+    [bg setFill];
+    NSRectFill(NSMakeRect(rulerX, 0, kDMRulerWidth, height));
+    if (!_trackedEditor) return;
+
+    // A separate full-document track stays useful when only part of a long map fits.
+    ScintillaView *src = _trackedEditor.scintillaView;
+    sptr_t total = MAX((sptr_t)1, [src message:SCI_GETLINECOUNT]);
+    [[self _viewportColor] setFill];
+    NSRectFill([self _rulerThumbRect]);
+
+    NSColor *matchColor = [NSColor systemTealColor];
+    NSColor *currentColor = [NSColor systemOrangeColor];
+    // Full-file marks stay bounded independently of the number of matches.
+    [matchColor setFill];
+    for (const DMMatch &match : _rulerMatches) {
+        if (match.start >= 0)
+            NSRectFill(NSMakeRect(rulerX + 3,
+                MAX(0, height - 2 - (CGFloat)match.line / total * height),
+                kDMRulerWidth - 6, 2));
+    }
+
+    sptr_t selection = [src message:SCI_GETSELECTIONSTART];
+    auto current = std::lower_bound(_matches.begin(), _matches.end(), selection,
+        [](const DMMatch &m, sptr_t position) { return m.start < position; });
+    if (current != _matches.end() && [self _isCurrentMatch:*current]) {
+        [currentColor setFill];
+        NSRectFill(NSMakeRect(rulerX + 1, MAX(0, height - 2 - (CGFloat)current->line / total * height),
+                              kDMRulerWidth - 2, 3));
+    }
+
+    // The visible map also highlights the actual matched text, including multi-line matches.
+    sptr_t mapFirst = [_mapSci message:SCI_GETFIRSTVISIBLELINE];
+    CGFloat lineH = MAX((sptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]);
+    sptr_t mapLast = mapFirst + (sptr_t)ceil(height / lineH);
+    auto it = std::lower_bound(_matches.begin(), _matches.end(), mapFirst,
+        [](const DMMatch &m, sptr_t line) { return m.endLine < line; });
+    [NSGraphicsContext saveGraphicsState];
+    NSRectClip(NSMakeRect(0, 0, rulerX, height));
+    for (; it != _matches.end() && it->line <= mapLast; ++it) {
+        BOOL currentMatch = [self _isCurrentMatch:*it];
+        [[(currentMatch ? currentColor : matchColor) colorWithAlphaComponent:0.55] setFill];
+        for (sptr_t line = MAX(mapFirst, it->line); line <= MIN(mapLast, it->endLine); ++line) {
+            sptr_t start = line == it->line ? it->start :
+                [_mapSci message:SCI_POSITIONFROMLINE wParam:line];
+            sptr_t end = line == it->endLine ? it->end :
+                [_mapSci message:SCI_GETLINEENDPOSITION wParam:line];
+            CGFloat x1 = [_mapSci message:SCI_POINTXFROMPOSITION wParam:0 lParam:start];
+            CGFloat x2 = [_mapSci message:SCI_POINTXFROMPOSITION wParam:0 lParam:end];
+            NSRectFill(NSMakeRect(x1, height - (line - mapFirst + 1) * lineH,
+                                  MAX(3.0, x2 - x1), lineH));
+        }
+    }
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+// ── Mouse handling ──────────────────────────────────────────────────────────
 
 - (void)_overlayMouseDown:(NSPoint)pt {
-    NSRect   vr            = [self _viewportRectForOverlay:_overlay];
-    CGFloat  h             = _overlay.bounds.size.height;
-    CGFloat  fromTop       = h - pt.y;                        // distance from panel top
-    CGFloat  rectCenterFT  = h - NSMidY(vr);                 // rect center, fromTop
-
-    // Grab offset: keeps the exact grab point under the pointer during drag.
-    _grabOffset = NSPointInRect(pt, vr) ? (fromTop - rectCenterFT) : 0.0f;
-
-    [self _dragToFromTop:fromTop - _grabOffset];
+    if (!_trackedEditor) return;
+    ScintillaView *src = _trackedEditor.scintillaView;
+    CGFloat height = _overlay.bounds.size.height;
+    CGFloat fromTop = height - pt.y;
+    _draggingRuler = pt.x >= _overlay.bounds.size.width - kDMRulerWidth;
+    NSRect viewport = [self _viewportRectForOverlay:_overlay];
+    if (_draggingRuler) {
+        sptr_t total = MAX((sptr_t)1, [src message:SCI_GETLINECOUNT]);
+        double line = fromTop / MAX(1.0, height) * total;
+        const DMMatch *nearest = nullptr;
+        for (const DMMatch &match : _rulerMatches)
+            if (match.start >= 0 && (!nearest || fabs(match.line - line) < fabs(nearest->line - line)))
+                nearest = &match;
+        if (nearest && fabs(nearest->line - line) * height / total <= 4) {
+            [src message:SCI_ENSUREVISIBLE wParam:nearest->line];
+            [src message:SCI_ENSUREVISIBLE wParam:nearest->endLine];
+            [src message:SCI_SETSEL wParam:nearest->start lParam:nearest->end];
+            [src message:SCI_SCROLLCARET];
+        } else if (!NSPointInRect(pt, [self _rulerThumbRect])) {
+            CGFloat thumbHeight = [self _rulerThumbRect].size.height;
+            [src message:SCI_SETFIRSTVISIBLELINE
+                  wParam:(uptr_t)std::clamp((sptr_t)lround((fromTop - thumbHeight / 2) /
+                                                        MAX(1.0, height - thumbHeight) *
+                                                        [self _maxFirstDisplayLine]),
+                                            (sptr_t)0, [self _maxFirstDisplayLine])];
+        }
+    } else if (!NSPointInRect(pt, viewport)) {
+        // Clicking code navigates to that code, rather than a percentage of the file.
+        sptr_t lineH = MAX((sptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]);
+        sptr_t line = [_mapSci message:SCI_GETFIRSTVISIBLELINE] + (sptr_t)(fromTop / lineH);
+        line = std::clamp(line, (sptr_t)0, MAX((sptr_t)0, [src message:SCI_GETLINECOUNT] - 1));
+        sptr_t visibleLine = [src message:SCI_VISIBLEFROMDOCLINE wParam:line];
+        [src message:SCI_SETFIRSTVISIBLELINE
+              wParam:MAX((sptr_t)0, visibleLine - [src message:SCI_LINESONSCREEN] / 2)];
+    }
+    [self _syncScroll];
+    _dragStartY = fromTop;
+    _dragStartFirst = [src message:SCI_GETFIRSTVISIBLELINE];
+    CGFloat thumbHeight = _draggingRuler ? [self _rulerThumbRect].size.height :
+        [self _viewportRectForOverlay:_overlay].size.height;
+    _dragTrackHeight = height > thumbHeight ? height - thumbHeight : height;
 }
 
 - (void)_overlayMouseDragged:(NSPoint)pt {
-    CGFloat fromTop = _overlay.bounds.size.height - pt.y;
-    [self _dragToFromTop:fromTop - _grabOffset];
-}
-
-// Sets srcFirst so the viewport rect center lands at targetCenterFromTop.
-// Uses the analytical inverse of:  center = srcFirst * K + rectH/2
-- (void)_dragToFromTop:(CGFloat)targetCenterFromTop {
-    EditorView *ed = _trackedEditor;
-    if (!ed) return;
-
-    intptr_t srcTotal   = MAX((intptr_t)1, [ed.scintillaView message:SCI_GETLINECOUNT]);
-    intptr_t srcVisible = MAX((intptr_t)1, [ed.scintillaView message:SCI_LINESONSCREEN]);
-    intptr_t mapTotal   = MAX((intptr_t)1, [_mapSci message:SCI_GETLINECOUNT]);
-    intptr_t mapLineH   = MAX((intptr_t)1, [_mapSci message:SCI_TEXTHEIGHT wParam:0]);
-    intptr_t panelH     = MAX((intptr_t)1, (intptr_t)_mapSci.bounds.size.height);
-    intptr_t mapVisLines = panelH / mapLineH;
-    intptr_t maxSrcFirst = MAX((intptr_t)1, srcTotal - srcVisible);
-    intptr_t maxMapFirst = MAX((intptr_t)0, mapTotal - mapVisLines);
-
-    // bandH and rectH must match _viewportRectForOverlay: exactly.
-    CGFloat bandH = (CGFloat)srcVisible * (CGFloat)mapLineH;
-    CGFloat rectH = bandH * 0.5f;
-
-    // K = d(rectCenter)/d(srcFirst) — derived from the proportional-scroll geometry.
-    // Since mapTotal == srcTotal (same document), this simplifies to:
-    //   K = [(maxSrcFirst - maxMapFirst)*mapLineH + (bandH - rectH)] / maxSrcFirst
-    CGFloat K = ((CGFloat)(maxSrcFirst - maxMapFirst) * (CGFloat)mapLineH + (bandH - rectH))
-                / (CGFloat)maxSrcFirst;
-    if (K < 0.01f) K = 0.01f;   // guard: tiny documents where geometry degenerates
-
-    // Invert: srcFirst = (targetCenter - rectH/2) / K
-    intptr_t newSrcFirst = (intptr_t)((targetCenterFromTop - rectH * 0.5f) / K + 0.5f);
-    newSrcFirst = MAX((intptr_t)0, MIN(maxSrcFirst, newSrcFirst));
-
-    [ed.scintillaView message:SCI_SETFIRSTVISIBLELINE wParam:(uptr_t)newSrcFirst];
+    if (!_trackedEditor) return;
+    sptr_t first = DocumentMap::draggedFirstLine(_dragStartFirst,
+        _overlay.bounds.size.height - pt.y - _dragStartY,
+        _dragTrackHeight, [self _maxFirstDisplayLine]);
+    [_trackedEditor.scintillaView message:SCI_SETFIRSTVISIBLELINE wParam:first];
     [self _syncScroll];
 }
 
@@ -451,10 +597,20 @@ static sptr_t _dmBGRFromColor(NSColor *c) {
 
 - (void)_cursorMoved:(NSNotification *)note {
     if (note.object != _trackedEditor) return;
+    sptr_t previousDoc = _mapDoc;
     [self _syncDocument];
     [self _syncScroll];
+    if (previousDoc != _mapDoc) [self _restartSearch];
+}
+
+- (void)_documentChanged:(NSNotification *)note {
+    EditorView *editor = note.object;
+    if (!_trackedEditor || [editor.scintillaView message:SCI_GETDOCPOINTER] != _mapDoc) return;
+    [self _restartSearch];
     [self _scheduleContentUpdate];
 }
+
+- (void)_searchChanged:(NSNotification *)note { [self _restartSearch]; }
 
 - (void)_prefsChanged:(NSNotification *)note {
     // Both notifications are posted synchronously and every EditorView

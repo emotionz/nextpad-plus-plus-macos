@@ -3,6 +3,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// The Find window and incremental search publish their latest query for document maps.
+extern NSNotificationName const NPPOverviewSearchChangedNotification;
+
 typedef NS_ENUM(NSInteger, NPPSearchType) {
     NPPSearchNormal   = 0,
     NPPSearchExtended = 1,  // \n \r \t \0 \xNN escapes
@@ -57,6 +60,9 @@ typedef NS_ENUM(NSInteger, NPPSearchDir) {
 
 /// Centralized search operations — stateless utility methods.
 @interface SearchEngine : NSObject
+
++ (void)setOverviewSearchOptions:(NPPFindOptions *)options;
++ (nullable NPPFindOptions *)overviewSearchOptions;
 
 /// Convert Extended search string (\n \r \t \0 \xNN) to literal characters.
 + (NSString *)expandExtendedString:(NSString *)input;

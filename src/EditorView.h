@@ -6,6 +6,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Posted when the cursor moves. Object is the EditorView.
 extern NSNotificationName const EditorViewCursorDidMoveNotification;
 
+/// Posted after text insertion/deletion; object is the EditorView.
+extern NSNotificationName const EditorViewDocumentDidChangeNotification;
+
 /// Posted when a Scintilla editor gains keyboard focus (SCN_FOCUSIN).
 extern NSNotificationName const EditorViewDidGainFocusNotification;
 

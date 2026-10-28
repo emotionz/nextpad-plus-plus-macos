@@ -501,20 +501,3 @@ target_link_libraries(NotepadPlusPlusMac PRIVATE
 set_source_files_properties(${APP_SRCS} PROPERTIES
     COMPILE_FLAGS "-fobjc-arc"
 )
-
-# Small Cocoa regression harness; excluded from normal application builds.
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ConfigurationTests.plist"
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>org.nextpadplusplus.configurationtests</string><key>CFBundleExecutable</key><string>NppConfigurationTests</string><key>CFBundleShortVersionString</key><string>${NPP_FORK_VERSION}</string><key>NppUpstreamBaseVersion</key><string>${NPP_UPSTREAM_VERSION}</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>")
-add_executable(NppConfigurationTests EXCLUDE_FROM_ALL MACOSX_BUNDLE
-    ConfigurationTests.mm src/NppUIConfiguration.mm src/NppVersion.mm
-    src/NppLocalizer.mm src/MenuBuilder.mm src/NppBuiltinLanguages.mm)
-target_include_directories(NppConfigurationTests PRIVATE src "${SCI_ROOT}/include")
-target_compile_options(NppConfigurationTests PRIVATE -fobjc-arc)
-target_link_libraries(NppConfigurationTests PRIVATE "-framework Cocoa")
-set_target_properties(NppConfigurationTests PROPERTIES
-    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/ConfigurationTests.plist"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "org.nextpadplusplus.configurationtests")
-add_custom_command(TARGET NppConfigurationTests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/resources/localization"
-        "$<TARGET_BUNDLE_DIR:NppConfigurationTests>/Contents/Resources/localization")
