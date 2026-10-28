@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(NotepadPlusPlusMac OBJCXX CXX C)
+include(ForkVersion.cmake)
+set(NPP_BUILD_NUMBER "$ENV{GITHUB_RUN_NUMBER}")
+if(NOT NPP_BUILD_NUMBER MATCHES "^[0-9]+$")
+    set(NPP_BUILD_NUMBER "1")
+endif()
 
 if(APPLE)
     set(CMAKE_AR /usr/bin/ar)
@@ -111,6 +116,8 @@ set(APP_SRCS
     src/EditorView.mm
     src/TabManager.mm
     src/NppTabBar.mm
+    src/NppVersion.mm
+    src/NppUIConfiguration.mm
     src/MenuBuilder.mm
     src/FindReplacePanel.mm
     src/ColumnEditorPanel.mm
@@ -153,6 +160,8 @@ set(APP_HEADERS
     src/EditorView.h
     src/TabManager.h
     src/NppTabBar.h
+    src/NppVersion.h
+    src/NppUIConfiguration.h
     src/MenuBuilder.h
     src/FindReplacePanel.h
     src/ColumnEditorPanel.h
@@ -468,8 +477,8 @@ set_target_properties(NotepadPlusPlusMac PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/Info.plist"
     MACOSX_BUNDLE_BUNDLE_NAME "Nextpad++"
     MACOSX_BUNDLE_GUI_IDENTIFIER "org.nextpadplusplus.mac"
-    MACOSX_BUNDLE_BUNDLE_VERSION "1.0.8"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.8"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${NPP_BUILD_NUMBER}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${NPP_FORK_VERSION}"
 )
 
 target_include_directories(NotepadPlusPlusMac PRIVATE
@@ -490,3 +499,20 @@ target_link_libraries(NotepadPlusPlusMac PRIVATE
 set_source_files_properties(${APP_SRCS} PROPERTIES
     COMPILE_FLAGS "-fobjc-arc"
 )
+
+# Small Cocoa regression harness; excluded from normal application builds.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ConfigurationTests.plist"
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>org.nextpadplusplus.configurationtests</string><key>CFBundleExecutable</key><string>NppConfigurationTests</string><key>CFBundleShortVersionString</key><string>${NPP_FORK_VERSION}</string><key>NppUpstreamBaseVersion</key><string>${NPP_UPSTREAM_VERSION}</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>")
+add_executable(NppConfigurationTests EXCLUDE_FROM_ALL MACOSX_BUNDLE
+    ConfigurationTests.mm src/NppUIConfiguration.mm src/NppVersion.mm
+    src/NppLocalizer.mm src/MenuBuilder.mm src/NppBuiltinLanguages.mm)
+target_include_directories(NppConfigurationTests PRIVATE src "${SCI_ROOT}/include")
+target_compile_options(NppConfigurationTests PRIVATE -fobjc-arc)
+target_link_libraries(NppConfigurationTests PRIVATE "-framework Cocoa")
+set_target_properties(NppConfigurationTests PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/ConfigurationTests.plist"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "org.nextpadplusplus.configurationtests")
+add_custom_command(TARGET NppConfigurationTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/resources/localization"
+        "$<TARGET_BUNDLE_DIR:NppConfigurationTests>/Contents/Resources/localization")
