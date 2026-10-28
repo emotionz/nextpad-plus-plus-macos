@@ -914,7 +914,7 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
 
 - (NSView *)_buildToolbarPage {
     NSTabView *tabs = [[NSTabView alloc] initWithFrame:NSMakeRect(0, 0, 480, 410)];
-    tabs.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    tabs.autoresizingMask = NSViewWidthSizable;
     NppLocalizer *loc = [NppLocalizer shared];
     NSArray *items = [MainWindowController toolbarConfigurationItems];
     CGFloat height = MAX(390, 104 + items.count * 28);

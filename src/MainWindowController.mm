@@ -3130,7 +3130,8 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
                 NSMutableArray *ids = [NSMutableArray array];
                 for (NSString *identifier in g[section]) {
                     if (NppToolbarItemRequired(identifier)) continue;
-                    BOOL visible = NppToolbarItemVisible(identifier, ![section isEqualToString:@"hidden"]);
+                    BOOL visible = NppToolbarItemVisible(identifier, ![section isEqualToString:@"hidden"]) &&
+                        ![_toolbarConfig[@"hiddenIDs"] containsObject:identifier];
                     if (!visible) continue;
                     if ([section isEqualToString:@"hidden"]) [restored addObject:identifier];
                     else [ids addObject:identifier];
