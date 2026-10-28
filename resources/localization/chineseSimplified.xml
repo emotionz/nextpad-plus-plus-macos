@@ -1972,6 +1972,83 @@ Translation note:
 				<Item id="91033" name="此文件已被其他程序修改。重新加载将放弃尚未保存的更改。"/>
 				<Item id="91034" name="例如 .$%-"/>
 				<Item id="91035" name="安装 nextpad++ 命令行工具…"/>
+							<Item id="92000" name="菜单栏"/>
+				<Item id="92001" name="选择在菜单栏中显示的菜单。"/>
+				<Item id="92002" name="功能显示"/>
+				<Item id="92003" name="外观"/>
+				<Item id="92004" name="新建标签页按钮"/>
+				<Item id="92005" name="工具栏显示时，新建、打开和保存始终保留。其他按钮可单独选择是否显示。"/>
+				<Item id="92006" name="检查原项目更新…"/>
+				<Item id="92007" name="原项目有更新（v%@）"/>
+				<Item id="92008" name="关于 Nextpad++ v%@（%@）"/>
+				<Item id="92009" name="原项目的发布信息无效，请稍后重试。"/>
+				<Item id="92010" name="二次开发版本：v%@&#10;上游基线：v%@&#10;上游最新发布：v%@&#10;原项目暂无更高版本的正式发布。"/>
+				<Item id="92011" name="二次开发版本：v%@&#10;上游基线：v%@&#10;上游最新发布：v%@&#10;&#10;%@"/>
+				<Item id="92012" name="本 macOS 版本基于原 Nextpad++ 项目进行二次开发。&#10;上游基线：v%@&#10;构建编号：%@&#10;&#10;原项目：&#10;https://github.com/nextpad-plus-plus/nextpad-plus-plus-macos&#10;二次开发项目：&#10;https://github.com/emotionz/nextpad-plus-plus-macos&#10;&#10;版权归原作者及贡献者所有。本程序按 GNU GPL v3 或更新版本授权，不提供任何担保。&#10;https://www.gnu.org/licenses/gpl-3.0.html"/>
+				<Item id="92013" name="ASCII 转十六进制"/>
+				<Item id="92014" name="十六进制转 ASCII"/>
+				<Item id="92015" name="升序"/>
+				<Item id="92016" name="升序（忽略大小写）"/>
+				<Item id="92017" name="降序"/>
+				<Item id="92018" name="Base64 解码"/>
+				<Item id="92019" name="Base64 解码（严格模式）"/>
+				<Item id="92020" name="Base64 编码"/>
+				<Item id="92021" name="Base64 编码（含填充）"/>
+				<Item id="92022" name="Base64 URL 安全解码"/>
+				<Item id="92023" name="Base64 URL 安全编码"/>
+				<Item id="92024" name="按长度排序（从长到短）"/>
+				<Item id="92025" name="按长度排序（从短到长）"/>
+				<Item id="92026" name="清除只读标记"/>
+				<Item id="92027" name="克隆到另一水平视图"/>
+				<Item id="92028" name="克隆到另一垂直视图"/>
+				<Item id="92029" name="转换工具"/>
+				<Item id="92030" name="复制所有文件名"/>
+				<Item id="92031" name="复制当前目录路径"/>
+				<Item id="92032" name="复制文件名"/>
+				<Item id="92033" name="自定义浏览器…"/>
+				<Item id="92034" name="小数升序（逗号分隔）"/>
+				<Item id="92035" name="小数降序（逗号分隔）"/>
+				<Item id="92036" name="小数升序（点号分隔）"/>
+				<Item id="92037" name="小数降序（点号分隔）"/>
+				<Item id="92038" name="在文件中查找…"/>
+				<Item id="92039" name="完成或选择自动补全项"/>
+				<Item id="92040" name="隐藏行标记（书签）"/>
+				<Item id="92041" name="忽略大小写并匹配全词"/>
+				<Item id="92042" name="整数升序"/>
+				<Item id="92043" name="整数降序"/>
+				<Item id="92044" name="反选书签"/>
+				<Item id="92045" name="MIME 工具"/>
+				<Item id="92046" name="区分大小写并匹配全词"/>
+				<Item id="92047" name="合并空行"/>
+				<Item id="92048" name="移动到另一水平视图"/>
+				<Item id="92049" name="移动到另一垂直视图"/>
+				<Item id="92050" name="上一个书签"/>
+				<Item id="92051" name="下一个书签"/>
+				<Item id="92052" name="上一个标记项"/>
+				<Item id="92053" name="下一个标记项"/>
+				<Item id="92054" name="Nextpad++ macOS 主页"/>
+				<Item id="92055" name="Nextpad++ macOS 项目页面"/>
+				<Item id="92056" name="在 Finder 中打开所在文件夹"/>
+				<Item id="92057" name="随机排序"/>
+				<Item id="92058" name="遮盖选中内容 ■（Shift：•）"/>
+				<Item id="92059" name="移除空行"/>
+				<Item id="92060" name="移除多余空白及行尾"/>
+				<Item id="92061" name="重置视图"/>
+				<Item id="92062" name="反转顺序"/>
+				<Item id="92063" name="显示空格和 Tab"/>
+				<Item id="92064" name="跳过当前项并多选下一项"/>
+				<Item id="92065" name="行排序"/>
+				<Item id="92066" name="终端"/>
+				<Item id="92067" name="切换只读模式"/>
+				<Item id="92068" name="显示或隐藏工具栏"/>
+				<Item id="92069" name="解锁"/>
+				<Item id="92070" name="仅匹配全词"/>
+				<Item id="92071" name="显示非打印字符"/>
+				<Item id="92072" name="显示控制字符和 Unicode 行尾"/>
+				<Item id="92073" name="宏"/>
+				<Item id="92074" name="运行"/>
+				<Item id="92075" name="窗口"/>
+				<Item id="92076" name="帮助"/>
 			</MacStrings>
 		</Dialog>
 		<MessageBox>
