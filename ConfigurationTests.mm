@@ -59,6 +59,9 @@ int main(void) {
             check(![[loc translate:text] isEqual:text], [@"translation: " stringByAppendingString:text]);
         for (NSString *term in @[@"JSON", @"XML", @"UTF-8", @"Git", @"API", @"Python"])
             check([[loc translate:term] isEqual:term], [@"technical term preserved: " stringByAppendingString:term]);
+        check(![[loc translate:@"Ascending"] isEqual:[loc translate:@"Ascending (case-insensitive)"]], @"sort variants keep distinct translations");
+        check([[loc translate:@"Base64 Decode (Strict Mode)"] containsString:@"严格"], @"strict Base64 mode is labeled");
+        check(![[loc translate:@"Base64 Decode"] isEqual:[loc translate:@"Base64 Decode (Strict Mode)"]], @"Base64 modes keep distinct translations");
         // Recursive translation, including a third-level menu item.
         NSMenu *root = [[NSMenu alloc] initWithTitle:@"Tools"];
         NSMenuItem *parent = [[NSMenuItem alloc] initWithTitle:@"Converter" action:nil keyEquivalent:@""];
