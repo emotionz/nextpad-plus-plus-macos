@@ -36,23 +36,25 @@ jobs:
           app_pid=$!
           sleep 12
           kill -0 "$app_pid"
-          open -a "$app" --args -language chineseSimplified || true
-          sleep 3
-          screencapture -x build/toolbar-smoke-test.png || true
           kill "$app_pid"
           wait "$app_pid" || true
-      - name: Package
+      - name: Package DMG
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'build/Nextpad++.app/Contents/Info.plist')
-          ditto -c -k --sequesterRsrc --keepParent 'build/Nextpad++.app' "dist/Nextpad-v${version}-macOS.zip"
-          hdiutil create -volname 'Nextpad++' -srcfolder 'build/Nextpad++.app' -ov -format UDZO "dist/Nextpad-v${version}-macOS.dmg"
-          git rev-parse HEAD > dist/SOURCE_COMMIT.txt
-          cp build/dependencies.txt build/launch.log dist/
-          if [ -f build/toolbar-smoke-test.png ]; then cp build/toolbar-smoke-test.png dist/; fi
-          shasum -a 256 dist/*.zip dist/*.dmg > dist/SHA256SUMS.txt
+          dmg_root=$(mktemp -d "$RUNNER_TEMP/nextpad-dmg.XXXXXX")
+          trap 'rm -rf "$dmg_root"' EXIT
+          ditto 'build/Nextpad++.app' "$dmg_root/Nextpad++.app"
+          ln -s /Applications "$dmg_root/Applications"
+          test "$(readlink "$dmg_root/Applications")" = /Applications
+          dmg="dist/Nextpad-v${version}-macOS.dmg"
+          hdiutil create -volname 'Nextpad++' -srcfolder "$dmg_root" -ov -format UDZO "$dmg"
+          hdiutil verify "$dmg"
       - uses: actions/upload-artifact@v6
         with:
           name: Nextpad-v${{ steps.bundle.outputs.version }}-macOS
-          path: dist/
+          path: dist/*.dmg
+          if-no-files-found: error
           retention-days: 30
