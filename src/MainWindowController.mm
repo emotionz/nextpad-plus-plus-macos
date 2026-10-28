@@ -14,6 +14,7 @@
 #import "NppScintillaIDs.h"
 #import "NPPBatchDialog.h"
 #import "MenuBuilder.h"
+#import "NppUIConfiguration.h"
 #import "ColumnEditorPanel.h"
 // FindInFilesPanel removed — all search goes through FindWindow
 #import "SidePanelHost.h"
@@ -1721,17 +1722,18 @@ static const CGFloat kTGRadius   = 12.0;  // pill corner radius (rounded, mockup
 /// Parse toolbarButtonsConf.xml and return the ordered list of visible buttons.
 /// The XML document order determines toolbar button order (left to right).
 /// Lookup order: ~/Library/Application Support/Nextpad++/toolbarButtonsConf.xml → bundled default.
+static NSArray<NSArray *> *toolbarDescriptors();
 static NSDictionary *_parseToolbarConfig(void) {
     NSString *userPath = [nppConfigDir() stringByAppendingPathComponent:@"toolbarButtonsConf.xml"];
     BOOL hasUserConfig = [[NSFileManager defaultManager] fileExistsAtPath:userPath];
     NSString *path = hasUserConfig
         ? userPath
         : [[NSBundle mainBundle] pathForResource:@"toolbarButtonsConf" ofType:@"xml"];
-    if (!path) return @{};
+    // Missing or invalid XML falls back to the built-in descriptor list.
 
-    NSXMLDocument *doc = [[NSXMLDocument alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]
-                                                              options:0 error:nil];
-    if (!doc) return @{};
+    NSXMLDocument *doc = path ? [[NSXMLDocument alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]
+                                                              options:0 error:nil] : nil;
+
 
     // Check <Standard hideAll="yes">
     NSArray *standardNodes = [doc nodesForXPath:@"//Standard" error:nil];
@@ -1745,6 +1747,7 @@ static NSDictionary *_parseToolbarConfig(void) {
     NSMutableArray *visibleButtons = [NSMutableArray array];
     NSMutableSet *hiddenIDs = [NSMutableSet set];
 
+    NSMutableSet *knownIDs = [NSMutableSet set];
     NSArray *buttons = [doc nodesForXPath:@"//Standard/Button" error:nil];
     for (NSXMLElement *el in buttons) {
         NSString *btnId  = [el attributeForName:@"id"].stringValue;
@@ -1754,7 +1757,8 @@ static NSDictionary *_parseToolbarConfig(void) {
         NSString *trigger = [el attributeForName:@"trigger"].stringValue;
         if (!btnId) continue;
 
-        BOOL isHidden = hideAll || [hide isEqualToString:@"yes"];
+        [knownIDs addObject:btnId];
+        BOOL isHidden = !NppToolbarItemVisible(btnId, !(hideAll || [hide isEqualToString:@"yes"]));
         if (isHidden) {
             [hiddenIDs addObject:btnId];
         } else {
@@ -1765,6 +1769,16 @@ static NSDictionary *_parseToolbarConfig(void) {
                 @"trigger": trigger ?: @"click"
             }];
         }
+    }
+
+    for (NSArray *desc in toolbarDescriptors()) {
+        NSString *identifier = desc[0];
+        BOOL defaultVisible = !hasUserConfig && !hideAll;
+        if ([knownIDs containsObject:identifier]) continue;
+        if (NppToolbarItemVisible(identifier, defaultVisible)) {
+            [visibleButtons addObject:@{@"id": identifier, @"name": desc[1],
+                @"action": desc[4], @"trigger": @"click"}];
+        } else [hiddenIDs addObject:identifier];
     }
 
     // Parse appearance
@@ -1883,7 +1897,7 @@ static NSDictionary<NSString *, NSArray *> *toolbarGroupMap(void) {
         kTBGroup5:  @[kTBZoomIn, kTBZoomOut],
         kTBGroup6:  @[kTBSyncV, kTBSyncH],
         // Group7 = view toggles — handled specially (includes AllChars dropdown)
-        kTBGroup8:  @[kTBUDL, kTBDocMap, kTBDocList, kTBFuncList, kTBFileBrowser],
+        kTBGroup8:  @[kTBUDL, kTBDocMap, kTBDocList, kTBFuncList, kTBFileBrowser, kTBCharPanel, kTBClipboard, kTBProject],
         kTBGroup9:  @[kTBMonitor],
         kTBGroup10: @[kTBStartRecord, kTBStopRecord, kTBPlayRecord, kTBPlayRecordM, kTBSaveRecord],
     };
@@ -2290,8 +2304,81 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
 
 #pragma mark - Toolbar (NSToolbarDelegate)
 
+- (BOOL)_tabControlsVisible {
+    for (NSString *identifier in @[@"TB_TabNew", @"TB_TabList", @"TB_TabClose"])
+        if (NppToolbarItemVisible(identifier, YES)) return YES;
+    return NO;
+}
+
+- (BOOL)_groupHasVisibleSuccessor:(NSString *)identifier {
+    NSArray *ids = [self _classicDefaultItemIdentifiers:self.window.toolbar];
+    NSUInteger index = [ids indexOfObject:identifier];
+    return index != NSNotFound && index + 1 < ids.count &&
+        ![ids[index + 1] isEqualToString:NSToolbarFlexibleSpaceItemIdentifier];
+}
+
+- (NSArray<NSDictionary *> *)_visiblePluginToolbarItems {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary *pti in _pluginToolbarItems) {
+        BOOL defaultVisible = ![_toolbarConfig[@"hideAllPlugins"] boolValue] &&
+            ![_toolbarConfig[@"hiddenPluginCmdIDs"] containsObject:pti[@"cmdID"]];
+        if (NppToolbarItemVisible(NppPluginToolbarIdentifier(pti), defaultVisible)) [items addObject:pti];
+    }
+    return items;
+}
+
++ (NSArray<NSDictionary *> *)toolbarConfigurationItems {
+    NSMutableArray *items = [NSMutableArray array];
+    NSDictionary *config = _parseToolbarConfig();
+    for (NSArray *d in toolbarDescriptors())
+        [items addObject:@{@"id": d[0], @"title": [[NppLocalizer shared] translate:d[2]],
+                            @"visible": @(![config[@"hiddenIDs"] containsObject:d[0]])}];
+    NSArray *tabs = @[@[@"TB_TabNew", @"New Tab Button"], @[@"TB_TabList", @"Tab List"], @[@"TB_TabClose", @"Close Active Tab"]];
+    for (NSArray *d in tabs)
+        [items addObject:@{@"id": d[0], @"title": [[NppLocalizer shared] translate:d[1]], @"visible": @(NppToolbarItemVisible(d[0], YES))}];
+    MainWindowController *active = nil;
+    for (NSWindow *window in NSApp.windows)
+        if ([window.windowController isKindOfClass:self]) { active = (MainWindowController *)window.windowController; break; }
+    if (active && [active _toolbarUsesTahoe]) {
+        NSMutableSet *placed = [NSMutableSet set];
+        for (NSDictionary *group in active->_tahoeModel) {
+            if (![group[@"kind"] isEqualToString:@"builtin"]) continue;
+            [placed addObjectsFromArray:group[@"primary"] ?: @[]];
+            [placed addObjectsFromArray:group[@"overflow"] ?: @[]];
+        }
+        for (NSUInteger i = 0; i < items.count; i++) {
+            NSMutableDictionary *item = [items[i] mutableCopy];
+            if ([item[@"id"] hasPrefix:@"TB_Tab"]) continue;
+            item[@"visible"] = @(NppToolbarItemRequired(item[@"id"]) || ([placed containsObject:item[@"id"]] && [item[@"visible"] boolValue]));
+            items[i] = item;
+        }
+    }
+    NSMutableSet *seen = [NSMutableSet set];
+    for (NSWindow *window in NSApp.windows) {
+        if (![window.windowController isKindOfClass:self]) continue;
+        MainWindowController *controller = (MainWindowController *)window.windowController;
+        for (NSDictionary *pti in controller->_pluginToolbarItems) {
+            NSString *identifier = NppPluginToolbarIdentifier(pti);
+            if ([seen containsObject:identifier]) continue;
+            [seen addObject:identifier];
+            BOOL visible = [[controller _visiblePluginToolbarItems] containsObject:pti];
+            if ([controller _toolbarUsesTahoe]) {
+                NSDictionary *group = [controller _tahoePluginsGroup];
+                BOOL placed = [group[@"primary"] containsObject:pti[@"tooltip"]] || [group[@"overflow"] containsObject:pti[@"tooltip"]];
+                visible = visible && NppToolbarItemVisible(identifier, placed);
+            }
+            [items addObject:@{@"id": identifier, @"title": [NSString stringWithFormat:@"%@ — %@", [pti[@"pluginDir"] lastPathComponent], pti[@"tooltip"]], @"visible": @(visible)}];
+        }
+    }
+    return items;
+}
+
 - (void)buildToolbar {
     // Parse toolbar configuration (hidden buttons, extra buttons, appearance)
+    _tbWrap = nil; _tbSyncV = nil; _tbSyncH = nil; _tbMonitor = nil;
+    _tbUDL = nil; _tbDocMap = nil; _tbDocList = nil; _tbFuncList = nil; _tbFileBrowser = nil;
+    _tbIndentGuide = nil; _tbAllChars = nil; _tbAllCharsHoverGroup = nil;
+    _tbStartRecord = nil; _tbStopRecord = nil; _tbPlayRecord = nil; _tbPlayRecordM = nil; _tbSaveRecord = nil;
     _toolbarConfig = _parseToolbarConfig();
     // Tahoe profile: load (or materialize) the group layout from
     // toolbarButtonsTahoeConf.xml before the toolbar delegate is queried.
@@ -2321,6 +2408,13 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
         tb.allowsDisplayModeCustomization = NO;
     }
     self.window.toolbar = tb;
+    if (_pluginToolbarItems.count && ![self _toolbarUsesTahoe]) {
+        if ([_toolbarConfig[@"hasUserConfig"] boolValue]) {
+            NSInteger index = 1;
+            for (NSDictionary *pti in [self _visiblePluginToolbarItems])
+                [tb insertItemWithItemIdentifier:pti[@"id"] atIndex:index++];
+        } else [self _rebuildPluginToolbarGroups];
+    }
     self.window.toolbar.visible = [[NSUserDefaults standardUserDefaults] boolForKey:kPrefToolbarVisible];
     // Expanded style keeps the toolbar in its OWN row below the title bar for
     // BOTH profiles — matching the Classic layout and the Tahoe mockup. (Unified
@@ -2338,11 +2432,6 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
                                  tooltip:(NSString *)tooltip
                                    cmdID:(int)cmdID
 {
-    // Check if user's toolbar config hides this plugin button
-    if ([_toolbarConfig[@"hideAllPlugins"] boolValue]) return;
-    NSSet *hiddenCmds = _toolbarConfig[@"hiddenPluginCmdIDs"];
-    if ([hiddenCmds containsObject:@(cmdID)]) return;
-
     NSImage *icon = [self _resolvePluginToolbarIconForDir:pluginDir hint:iconHint];
     if (!icon) {
         NSLog(@"[Plugins] addPluginToolbarIcon: no icon found for cmdID %d in %@",
@@ -2372,6 +2461,7 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
         @"iconHint":   iconHint ?: @"",
     }];
     [_pluginToolbarItems addObject:pti];
+    if (![[self _visiblePluginToolbarItems] containsObject:pti]) return;
 
     // DEFAULT mode: plugins are packed into one toolbar item per plugin (grouped
     // by pluginDir) so a plugin that registers several icons gets them sitting
@@ -2407,7 +2497,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
 - (NSArray<NSString *> *)_orderedPluginGroupKeys {
     NSMutableArray<NSString *> *keys = [NSMutableArray array];
     NSMutableSet<NSString *> *seen = [NSMutableSet set];
-    for (NSDictionary *pti in _pluginToolbarItems) {
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems]) {
         NSString *k = npPluginGroupKey(pti);
         if (![seen containsObject:k]) { [seen addObject:k]; [keys addObject:k]; }
     }
@@ -2480,7 +2570,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
 
     // This group's plugin entries, in registration order.
     NSMutableArray<NSDictionary *> *members = [NSMutableArray array];
-    for (NSDictionary *pti in _pluginToolbarItems)
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems])
         if ([npPluginGroupKey(pti) isEqualToString:groupKey]) [members addObject:pti];
     if (members.count == 0) return nil;
 
@@ -2493,7 +2583,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
     if (idx > 0) {
         NSString *prevKey = orderedKeys[idx - 1];
         NSUInteger cnt = 0;
-        for (NSDictionary *pti in _pluginToolbarItems)
+        for (NSDictionary *pti in [self _visiblePluginToolbarItems])
             if ([npPluginGroupKey(pti) isEqualToString:prevKey]) cnt++;
         prevIsMulti = (cnt > 1);
     }
@@ -2581,7 +2671,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
 // single-icon plugins between such boundaries are coalesced (see below).
 - (BOOL)_isMultiIconGroupKey:(NSString *)groupKey {
     NSUInteger cnt = 0;
-    for (NSDictionary *pti in _pluginToolbarItems)
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems])
         if ([npPluginGroupKey(pti) isEqualToString:groupKey]) {
             if (++cnt > 1) return YES;
         }
@@ -2657,7 +2747,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
         if ([visible containsObject:it]) continue;   // visible in the toolbar → not hidden
         NSString *firstKey = [it.itemIdentifier substringFromIndex:kTBPluginSegPrefix.length];
         for (NSString *gk in [self _pluginSegmentKeysStartingAt:firstKey]) {
-            for (NSDictionary *pti in _pluginToolbarItems) {
+            for (NSDictionary *pti in [self _visiblePluginToolbarItems]) {
                 if (![npPluginGroupKey(pti) isEqualToString:gk]) continue;
                 NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:(pti[@"tooltip"] ?: @"")
                     action:@selector(pluginToolbarAction:) keyEquivalent:@""];
@@ -2694,7 +2784,7 @@ static NSString *npPluginGroupKey(NSDictionary *pti) {
 
     for (NSString *groupKey in groupKeys) {
         NSMutableArray<NSDictionary *> *members = [NSMutableArray array];
-        for (NSDictionary *pti in _pluginToolbarItems)
+        for (NSDictionary *pti in [self _visiblePluginToolbarItems])
             if ([npPluginGroupKey(pti) isEqualToString:groupKey]) [members addObject:pti];
         if (members.count == 0) continue;
 
@@ -3019,7 +3109,46 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
         model = m;
         [TahoeToolbarConfig saveModel:model];
     }
-    _tahoeModel = model;
+    // Apply visibility without overwriting the user's saved arrangement.
+    NSMutableArray *visibleModel = [NSMutableArray array];
+    NSMutableSet *placed = [NSMutableSet set];
+    NSDictionary *overrides = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NppToolbarVisibilityOverrides];
+    for (NSDictionary *group in model) {
+        NSMutableDictionary *g = [group mutableCopy];
+        if ([g[@"kind"] isEqualToString:@"builtin"]) {
+            NSMutableArray *restored = [NSMutableArray array];
+            for (NSString *section in @[@"primary", @"overflow", @"hidden"]) {
+                NSMutableArray *ids = [NSMutableArray array];
+                for (NSString *identifier in g[section]) {
+                    if (NppToolbarItemRequired(identifier)) continue;
+                    BOOL visible = NppToolbarItemVisible(identifier, ![section isEqualToString:@"hidden"]);
+                    if (!visible) continue;
+                    if ([section isEqualToString:@"hidden"]) [restored addObject:identifier];
+                    else [ids addObject:identifier];
+                    [placed addObject:identifier];
+                }
+                g[section] = ids;
+            }
+            g[@"overflow"] = [g[@"overflow"] arrayByAddingObjectsFromArray:restored];
+        }
+        [visibleModel addObject:g];
+    }
+    BOOL hasBuiltin = NO;
+    for (NSDictionary *g in visibleModel) if ([g[@"kind"] isEqualToString:@"builtin"]) hasBuiltin = YES;
+    if (!hasBuiltin) [visibleModel insertObject:[@{@"kind": @"builtin", @"label": @"File", @"primary": @[], @"overflow": @[], @"hidden": @[]} mutableCopy] atIndex:0];
+    for (NSMutableDictionary *g in visibleModel) {
+        if (![g[@"kind"] isEqualToString:@"builtin"]) continue;
+        NSMutableArray *primary = [g[@"primary"] mutableCopy];
+        [primary insertObjects:@[kTBNew, kTBOpen, kTBSave] atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 3)]];
+        g[@"primary"] = primary;
+        NSMutableArray *overflow = [g[@"overflow"] mutableCopy];
+        for (NSArray *d in toolbarDescriptors())
+            if (!NppToolbarItemRequired(d[0]) && [overrides[d[0]] boolValue] && ![placed containsObject:d[0]])
+                [overflow addObject:d[0]];
+        g[@"overflow"] = overflow;
+        break;
+    }
+    _tahoeModel = visibleModel;
 }
 
 // Append newly-registered plugin command names (to the Plugins overflow) that
@@ -3027,7 +3156,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
 // returns YES if the model changed.
 - (BOOL)_reconcileTahoePluginsIfNeeded {
     if (!_tahoeModel) return NO;
-    NSMutableArray<NSDictionary *> *model = [_tahoeModel mutableCopy];
+    NSMutableArray<NSDictionary *> *model = [[TahoeToolbarConfig load] mutableCopy];
     NSInteger idx = -1;
     NSMutableDictionary *plug = nil;
     for (NSInteger i = 0; i < (NSInteger)model.count; i++)
@@ -3067,8 +3196,8 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     if (!changed) return NO;
 
     if (idx >= 0) model[idx] = plug; else [model addObject:plug];
-    _tahoeModel = model;
     [TahoeToolbarConfig saveModel:model];
+    [self _loadTahoeToolbarModel];
     return YES;
 }
 
@@ -3091,36 +3220,35 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
         first = NO;
         [ids addObject:[kTBTahoeGroupPrefix stringByAppendingString:g[@"label"]]];
     }
-    if (_pluginToolbarItems.count > 0) {
+    if ([self _visiblePluginToolbarItems].count > 0) {
         [ids addObject:NSToolbarSpaceItemIdentifier];
         [ids addObject:kTBTahoePluginsGroup];
     }
     [ids addObject:NSToolbarFlexibleSpaceItemIdentifier];
-    [ids addObject:kTBTabControls];
+    if ([self _tabControlsVisible]) [ids addObject:kTBTabControls];
     return ids;
 }
 
 // Classic profile (current default): today's group layout.
 - (NSArray<NSToolbarItemIdentifier> *)_classicDefaultItemIdentifiers:(NSToolbar *)tb {
-    // When user has a custom toolbar config, use a single dynamic item
-    // containing all standard + plugin buttons in XML order
+    NSMutableArray *ids = [NSMutableArray array];
     if ([_toolbarConfig[@"hasUserConfig"] boolValue]) {
-        return @[kTBUserConfig,
-                 NSToolbarFlexibleSpaceItemIdentifier,
-                 kTBTabControls];
+        [ids addObject:kTBGroup1];
+        if ([_toolbarConfig[@"visibleButtons"] count] > 3) [ids addObject:kTBUserConfig];
+    } else {
+        for (NSString *group in @[kTBGroup1, kTBGroup2, kTBGroup3, kTBGroup4, kTBGroup5,
+                                  kTBGroup6, kTBGroup7, kTBGroup8, kTBGroup9, kTBGroup10]) {
+            NSArray *buttons = [group isEqualToString:kTBGroup7] ? @[kTBWrap, kTBAllChars, kTBIndentGuide] : toolbarGroupMap()[group];
+            for (NSString *identifier in buttons) {
+                if (![_toolbarConfig[@"hiddenIDs"] containsObject:identifier]) {
+                    [ids addObject:group]; break;
+                }
+            }
+        }
     }
-    return @[kTBGroup1,
-             kTBGroup2,
-             kTBGroup3,
-             kTBGroup4,
-             kTBGroup5,
-             kTBGroup6,   // scroll sync
-             kTBGroup7,   // view toggles (wrap, allchars, indent guide)
-             kTBGroup8,   // panels
-             kTBGroup9,   // monitoring
-             kTBGroup10,  // macro (no trailing separator)
-             NSToolbarFlexibleSpaceItemIdentifier,
-             kTBTabControls];
+    [ids addObject:NSToolbarFlexibleSpaceItemIdentifier];
+    if ([self _tabControlsVisible]) [ids addObject:kTBTabControls];
+    return ids;
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)tb {
@@ -3237,11 +3365,17 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     [self _reconcileTahoePluginsIfNeeded];
     NSDictionary *pg = [self _tahoePluginsGroup];
     NSArray<NSString *> *primNames = pg[@"primary"]  ?: @[];
-    NSArray<NSString *> *overNames = pg[@"overflow"] ?: @[];
+    NSMutableArray<NSString *> *overNames = [(pg[@"overflow"] ?: @[]) mutableCopy];
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems]) {
+        NSString *tip = pti[@"tooltip"];
+        if (![primNames containsObject:tip] && ![overNames containsObject:tip] &&
+            [[[NSUserDefaults standardUserDefaults] dictionaryForKey:NppToolbarVisibilityOverrides][NppPluginToolbarIdentifier(pti)] boolValue])
+            [overNames addObject:tip];
+    }
 
     // Live plugin items keyed by command name (tooltip) for ordered lookup.
     NSMutableDictionary<NSString *, NSDictionary *> *byTip = [NSMutableDictionary dictionary];
-    for (NSDictionary *pti in _pluginToolbarItems) {
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems]) {
         NSString *t = pti[@"tooltip"] ?: @"";
         if (t.length && !byTip[t]) byTip[t] = pti;
     }
@@ -3340,12 +3474,14 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
                     [ident substringFromIndex:kTBPluginGroupPrefix.length]];
 
     // Individual plugin items (user-config mode): one item per icon.
-    for (NSDictionary *pti in _pluginToolbarItems) {
+    for (NSDictionary *pti in [self _visiblePluginToolbarItems]) {
         if ([pti[@"id"] isEqualToString:ident]) {
             return [self makePluginToolbarItem:pti];
         }
     }
 
+    if ([ident isEqualToString:kTBGroup1] && [_toolbarConfig[@"hasUserConfig"] boolValue])
+        return [self makeGroupToolbarItem:ident identifiers:@[kTBNew, kTBOpen, kTBSave]];
     NSArray *idents = toolbarGroupMap()[ident];
     if (idents) return [self makeGroupToolbarItem:ident identifiers:idents];
     return nil;
@@ -3358,7 +3494,9 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     const CGFloat kSpacing = nppSpacing();
     const CGFloat kSepGap  = nppSepGap();   // total gap for a separator (padL + 1px line + padR)
 
-    NSArray *visibleButtons = _toolbarConfig[@"visibleButtons"];
+    NSMutableArray *visibleButtons = [NSMutableArray array];
+    for (NSDictionary *button in _toolbarConfig[@"visibleButtons"])
+        if (!NppToolbarItemRequired(button[@"id"])) [visibleButtons addObject:button];
     if (!visibleButtons.count) return nil;
 
     // Default group membership: which buttons belong to which group (for separator placement).
@@ -3474,53 +3612,6 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
         btnCount++;
     }
 
-    // ── Append visible plugin buttons (from <Plugin> section) ────────────────
-    NSArray *visPlugins = _toolbarConfig[@"visiblePluginButtons"];
-    if (visPlugins.count) {
-        // Separator before plugin section
-        if (btnCount > 0) {
-            CGFloat sepX = x + 3.0;
-            _ToolbarBorderLine *sv = [[_ToolbarBorderLine alloc]
-                initWithFrame:NSMakeRect(sepX, 0, 1, kBtnSize)];
-            [container addSubview:sv];
-            x += kSepGap;
-        }
-        for (NSDictionary *pb in visPlugins) {
-            if (btnCount > 0 && pb != visPlugins[0])
-                x += kSpacing;
-
-            int cmdID = [pb[@"cmdID"] intValue];
-            NSString *pName = pb[@"name"];
-
-            // Try to find icon from plugin's registered toolbar items
-            NSImage *pImg = nil;
-            for (NSDictionary *pti in _pluginToolbarItems) {
-                if ([pti[@"cmdID"] intValue] == cmdID) {
-                    pImg = pti[@"icon"];
-                    break;
-                }
-            }
-            // Try custom icon by plugin cmdID
-            if (!pImg) pImg = _customToolbarIcon(
-                [NSString stringWithFormat:@"Plugin_%d", cmdID], _toolbarConfig);
-            // Fallback
-            if (!pImg) pImg = [NSImage imageWithSystemSymbolName:@"puzzlepiece"
-                                        accessibilityDescription:pName];
-
-            NppToolbarButton *pBtn = [[NppToolbarButton alloc]
-                initWithFrame:NSMakeRect(x, 0, kBtnSize, kBtnSize)];
-            pBtn.image = pImg;
-            pBtn.toolTip = pName;
-            pBtn.tag = cmdID;
-            pBtn.target = self;
-            pBtn.action = @selector(pluginToolbarAction:);
-            [container addSubview:pBtn];
-
-            x += kBtnSize;
-            btnCount++;
-        }
-    }
-
     // Resize container to fit all buttons
     NSRect cf = container.frame;
     cf.size.width = x;
@@ -3531,11 +3622,6 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
     item.minSize = NSMakeSize(x, kBtnSize);
     item.maxSize = NSMakeSize(x, kBtnSize);
     return item;
-}
-
-// Whether this group should have a trailing separator line.
-static BOOL groupHasTrailingSep(NSString *ident) {
-    return ![ident isEqualToString:kTBGroup10]; // all groups except the last macro group
 }
 
 // Pack buttons with the configured spacing and keep the separator inside the item.
@@ -3559,7 +3645,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     // drawn by the first plugin group's leading separator (see
     // -makePluginGroupToolbarItemForKey:), so the macro group keeps its normal
     // "no trailing separator" rule regardless of whether plugins are present.
-    BOOL hasSep = groupHasTrailingSep(ident);
+    BOOL hasSep = [self _groupHasVisibleSuccessor:ident];
     NSInteger n = (NSInteger)idents.count;
     CGFloat buttonsW = n * kBtnSize + (n - 1) * kSpacing;
     CGFloat totalW = buttonsW + (hasSep ? kSepPadL + 1 + kSepPadR : 0);
@@ -3628,6 +3714,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     }
 
     NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:ident];
+    if ([ident isEqualToString:kTBGroup1]) item.visibilityPriority = NSToolbarItemVisibilityPriorityHigh;
     item.view    = groupView;
     item.minSize = NSMakeSize(totalW, kBtnSize);
     item.maxSize = NSMakeSize(totalW, kBtnSize);
@@ -3703,10 +3790,24 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     [outer addSubview:indentBtn];
     _tbIndentGuide = indentBtn;
 
-    // Trailing separator
-    NppSeparatorView *sv = [[NppSeparatorView alloc]
-        initWithFrame:NSMakeRect(buttonsW + kSepPadL, 0, 1, kBtnSize)];
-    [outer addSubview:sv];
+    NSArray *viewIDs = @[kTBWrap, kTBAllChars, kTBIndentGuide];
+    NSArray *views = @[wrapBtn, hoverGroup, indentBtn];
+    x = 0;
+    for (NSUInteger i = 0; i < views.count; i++) {
+        NSView *view = views[i];
+        if ([_toolbarConfig[@"hiddenIDs"] containsObject:viewIDs[i]]) { [view removeFromSuperview]; continue; }
+        NSRect frame = view.frame; frame.origin.x = x; view.frame = frame;
+        x += frame.size.width + kGap;
+    }
+    if (x == 0) return nil;
+    buttonsW = x - kGap;
+    BOOL hasSep = [self _groupHasVisibleSuccessor:kTBGroup7];
+    totalW = buttonsW + (hasSep ? kSepPadL + 1 + kSepPadR : 0);
+    outer.frame = NSMakeRect(0, 0, totalW, kBtnSize);
+    if (hasSep) {
+        NppSeparatorView *sv = [[NppSeparatorView alloc] initWithFrame:NSMakeRect(buttonsW + kSepPadL, 0, 1, kBtnSize)];
+        [outer addSubview:sv];
+    }
 
     NSToolbarItem *it = [[NSToolbarItem alloc] initWithItemIdentifier:kTBGroup7];
     it.view    = outer;
@@ -3718,7 +3819,8 @@ static BOOL groupHasTrailingSep(NSString *ident) {
 // Builds the right-aligned +  ▾  × tab-control group.
 - (NSToolbarItem *)makeTabControlsToolbarItem {
     static const CGFloat kW = 28.0, kH = 28.0, kSpc = 1.0;
-    CGFloat totalW = 3 * kW + 2 * kSpc;
+    CGFloat totalW = 0;
+    NSArray *controlIDs = @[@"TB_TabNew", @"TB_TabList", @"TB_TabClose"];
 
     NSView *groupView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, totalW, kH)];
 
@@ -3729,7 +3831,9 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     };
 
     for (int i = 0; i < 3; i++) {
-        CGFloat x = i * (kW + kSpc);
+        if (!NppToolbarItemVisible(controlIDs[i], YES)) continue;
+        CGFloat x = totalW;
+        totalW += kW + kSpc;
         NSButton *btn = [[NSButton alloc] initWithFrame:NSMakeRect(x, 0, kW, kH)];
         [btn setBordered:NO];
         btn.buttonType = NSButtonTypeMomentaryChange;
@@ -3741,6 +3845,9 @@ static BOOL groupHasTrailingSep(NSString *ident) {
         [groupView addSubview:btn];
     }
 
+    if (totalW == 0) return nil;
+    totalW -= kSpc;
+    groupView.frame = NSMakeRect(0, 0, totalW, kH);
     NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:kTBTabControls];
     item.view    = groupView;
     item.minSize = NSMakeSize(totalW, kH);
@@ -3847,7 +3954,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
         TabManager *tm = managers[g];
         if (!tm.allEditors.count) continue;
         if (groupsWithTabs > 1) {
-            NSMenuItem *hdr = [[NSMenuItem alloc] initWithTitle:labels[g] action:nil keyEquivalent:@""];
+            NSMenuItem *hdr = [[NSMenuItem alloc] initWithTitle:[[NppLocalizer shared] translate:labels[g]] action:nil keyEquivalent:@""];
             hdr.enabled = NO;
             [menu addItem:hdr];
         }
@@ -4122,6 +4229,7 @@ static BOOL groupHasTrailingSep(NSString *ident) {
     [[NSNotificationCenter defaultCenter]
         addObserver:self selector:@selector(_toolbarColorChanged:)
                name:@"NPPToolbarColorChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_toolbarLanguageChanged:) name:NppToolbarVisibilityChanged object:nil];
     // Tahoe toolbar group layout edited in Preferences → rebuild the toolbar.
     [[NSNotificationCenter defaultCenter]
         addObserver:self selector:@selector(_tahoeToolbarConfigChanged:)
@@ -7902,7 +8010,7 @@ static NSArray<NSDictionary *> *convertRecordedToXmlFormat(NSArray<NSDictionary 
 
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
     auto addIt = ^(NSString *title, SEL sel, BOOL on) {
-        NSMenuItem *it = [[NSMenuItem alloc] initWithTitle:title action:sel keyEquivalent:@""];
+        NSMenuItem *it = [[NSMenuItem alloc] initWithTitle:[[NppLocalizer shared] translate:title] action:sel keyEquivalent:@""];
         it.target = nil;  // first responder chain
         it.state  = on ? NSControlStateValueOn : NSControlStateValueOff;
         [menu addItem:it];

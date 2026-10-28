@@ -10,10 +10,13 @@ extern const NSInteger kMenuTagMacro;
 extern const NSInteger kMenuTagRun;
 extern const NSInteger kMenuTagLanguage;
 extern const NSInteger kMenuTagPlugins;
+extern const NSInteger kMenuTagWindow;
+extern const NSInteger kMenuTagHelp;
 
 /// Builds the application's main menu bar programmatically.
 @interface MenuBuilder : NSObject
 + (void)buildMainMenu;
++ (void)applyVisibility;
 
 /// Insert dynamically-loaded plugin menu items into the Plugins menu.
 /// Items are placed before the separator that precedes "Plugins Admin…".

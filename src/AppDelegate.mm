@@ -1,3 +1,4 @@
+#import "NppVersion.h"
 #import "AppDelegate.h"
 #import "NppPaths.h"
 #import "NppApplication.h"
@@ -882,7 +883,8 @@ static void NppRecoveryDone(void) {
 }
 
 - (void)showAboutPanel:(id)sender {
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.0.0";
+    NSString *version = NppForkVersion();
+    NppLocalizer *loc = [NppLocalizer shared];
 
 #if defined(__arm64__)
     NSString *archStr = @"ARM 64-bit";
@@ -893,26 +895,11 @@ static void NppRecoveryDone(void) {
 #endif
 
     NSAlert *about = [[NSAlert alloc] init];
-    about.messageText = [NSString stringWithFormat:@"Nextpad++ macOS v%@     (%@)", version, archStr];
-
-    NSString *license =
-        @"GNU General Public Licence\n\n"
-        @"This program is free software; you can redistribute it and/or "
-        @"modify it under the terms of the GNU General Public License "
-        @"as published by the Free Software Foundation; either version 3 "
-        @"of the License, or at your option any later version.\n\n"
-        @"This program is distributed in the hope that it will be useful, "
-        @"but WITHOUT ANY WARRANTY; without even the implied warranty of "
-        @"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the "
-        @"GNU General Public License for more details.\n\n"
-        @"You should have received a copy of the GNU General Public "
-        @"License along with this program. If not, see\n"
-        @"<https://www.gnu.org/licenses/>.";
+    about.messageText = [NSString stringWithFormat:[[NppLocalizer shared] translate:@"About Nextpad++ v%@ (%@)"], version, archStr];
 
     about.informativeText = [NSString stringWithFormat:
-        @"Build time: %s - %s\n\n"
-        @"Home: https://nextpad.org\n\n"
-        @"%@", __DATE__, __TIME__, license];
+        [loc translate:@"This customized macOS version is based on the original Nextpad++ project.\nUpstream base: v%@\nBuild: %@\n\nOriginal project:\nhttps://github.com/nextpad-plus-plus/nextpad-plus-plus-macos\nFork project:\nhttps://github.com/emotionz/nextpad-plus-plus-macos\n\nCopyright belongs to the original authors and contributors. Licensed under GNU GPL v3 or later, without warranty.\nhttps://www.gnu.org/licenses/gpl-3.0.html"],
+        NppUpstreamBaseVersion(), [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"1"];
 
     // Use our logo
     NSImage *logo = [[NSImage alloc] initWithContentsOfFile:
@@ -948,7 +935,7 @@ static NSString *const kUpdateMenuItemTag = @"checkForUpdatesMenuItem";
 }
 
 - (void)checkForUpdateUserInitiated:(BOOL)userInitiated {
-    NSString *currentVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.0.0";
+    NSString *currentVersion = NppUpstreamBaseVersion();
 
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:kGitHubReleasesAPI]];
     [req setValue:@"application/vnd.github+json" forHTTPHeaderField:@"Accept"];
@@ -982,24 +969,25 @@ static NSString *const kUpdateMenuItemTag = @"checkForUpdatesMenuItem";
                 return;
             }
 
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-            if (!json) return;
+            id result = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            NSDictionary *json = [result isKindOfClass:NSDictionary.class] ? result : nil;
+            NSString *latestVersion = NppNormalizedReleaseVersion(json[@"tag_name"]);
+            if (!latestVersion || ![json[@"prerelease"] isKindOfClass:NSNumber.class] ||
+                ![json[@"draft"] isKindOfClass:NSNumber.class] || [json[@"prerelease"] boolValue] || [json[@"draft"] boolValue]) {
+                if (userInitiated) {
+                    NSAlert *alert = [[NSAlert alloc] init];
+                    alert.messageText = [[NppLocalizer shared] translate:@"Unable to Check for Updates"];
+                    alert.informativeText = [[NppLocalizer shared] translate:@"The upstream release information is invalid. Please try again later."];
+                    [alert runModal];
+                }
+                return;
+            }
 
-            NSString *tagName = json[@"tag_name"]; // e.g. "v1.1.0"
-            if (!tagName.length) return;
-
-            // Strip leading 'v' if present
-            NSString *latestVersion = tagName;
-            if ([latestVersion hasPrefix:@"v"])
-                latestVersion = [latestVersion substringFromIndex:1];
-
-            NSComparisonResult cmp = [latestVersion compare:currentVersion options:NSNumericSearch];
-
-            if (cmp == NSOrderedDescending) {
+            if (NppUpstreamReleaseIsNewer(latestVersion)) {
                 // Update available — badge the menu item
                 NSMenuItem *mi = [self _updateMenuItem];
                 if (mi) {
-                        mi.title = [NSString stringWithFormat:@"Update Available (v%@)", latestVersion];
+                        mi.title = [NSString stringWithFormat:[[NppLocalizer shared] translate:@"Upstream Update Available (v%@)"], latestVersion];
                     NSString *imgPath = [[NSBundle mainBundle] pathForResource:@"icons/standard/status/status_yellow" ofType:@"png"];
                     if (imgPath) {
                         NSImage *img = [[NSImage alloc] initWithContentsOfFile:imgPath];
@@ -1018,7 +1006,7 @@ static NSString *const kUpdateMenuItemTag = @"checkForUpdatesMenuItem";
                 // Up to date — leave the menu item plain (no badge / icon).
                 NSMenuItem *mi = [self _updateMenuItem];
                 if (mi) {
-                    mi.title = @"Check for Updates…";
+                    mi.title = [[NppLocalizer shared] translate:@"Check Upstream Releases…"];
                     mi.image = nil;
                 }
 
@@ -1027,7 +1015,7 @@ static NSString *const kUpdateMenuItemTag = @"checkForUpdatesMenuItem";
                     NSAlert *a = [[NSAlert alloc] init];
                     a.messageText = [loc translate:@"You're Up to Date"];
                     a.informativeText = [NSString stringWithFormat:
-                        @"Nextpad++ %@ %@", currentVersion, [loc translate:@"is the latest version."]];
+                        [loc translate:@"Fork: v%@\nUpstream base: v%@\nLatest upstream release: v%@\nNo newer upstream release is available."], NppForkVersion(), currentVersion, latestVersion];
                     [a runModal];
                 }
             }
@@ -1040,37 +1028,20 @@ static NSString *const kUpdateMenuItemTag = @"checkForUpdatesMenuItem";
                       releaseNotes:(NSString *)notes
                          htmlURL:(NSString *)htmlURL
                           assets:(NSArray *)assets {
-    NSString *currentVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.0.0";
-
     NppLocalizer *loc = [NppLocalizer shared];
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = [NSString stringWithFormat:@"Nextpad++ v%@ %@", version, [loc translate:@"is Available"]];
+    alert.messageText = [NSString stringWithFormat:[loc translate:@"Upstream Update Available (v%@)"], version];
+    NSString *safeNotes = [notes isKindOfClass:NSString.class] ? notes : @"";
     alert.informativeText = [NSString stringWithFormat:
-        @"%@ v%@.\n\n%@",
-        [loc translate:@"You are currently running"],
-        currentVersion,
-        (notes.length > 500) ? [[notes substringToIndex:500] stringByAppendingString:@"…"] : (notes ?: @"")];
-    [alert addButtonWithTitle:[loc translate:@"Download"]];
+        [loc translate:@"Fork: v%@\nUpstream base: v%@\nLatest upstream release: v%@\n\n%@"],
+        NppForkVersion(), NppUpstreamBaseVersion(), version,
+        safeNotes.length > 500 ? [[safeNotes substringToIndex:500] stringByAppendingString:@"…"] : safeNotes];
     [alert addButtonWithTitle:[loc translate:@"Release Page"]];
     [alert addButtonWithTitle:[loc translate:@"Later"]].keyEquivalent = @"\033";
-
-    NSModalResponse resp = [alert runModal];
-
-    if (resp == NSAlertFirstButtonReturn) {
-        // Find DMG asset in release assets
-        NSString *downloadURL = nil;
-        for (NSDictionary *asset in assets) {
-            NSString *name = asset[@"name"];
-            if ([name.lowercaseString hasSuffix:@".dmg"]) {
-                downloadURL = asset[@"browser_download_url"];
-                break;
-            }
-        }
-        if (!downloadURL) downloadURL = htmlURL; // fallback to release page
-        [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:downloadURL]];
-    } else if (resp == NSAlertSecondButtonReturn) {
-        if (htmlURL.length)
-            [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:htmlURL]];
+    if ([alert runModal] == NSAlertFirstButtonReturn) {
+        // Always open the original project; never replace this fork automatically.
+        [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:
+            @"https://github.com/nextpad-plus-plus/nextpad-plus-plus-macos/releases/latest"]];
     }
 }
 

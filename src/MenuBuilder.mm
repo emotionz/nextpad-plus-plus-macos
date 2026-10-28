@@ -1,4 +1,5 @@
 #import "MenuBuilder.h"
+#import "NppUIConfiguration.h"
 #import "NppBuiltinLanguages.h"
 
 // Top-level menu-item tags. See MenuBuilder.h for rationale.
@@ -6,6 +7,8 @@ const NSInteger kMenuTagMacro    = 9900;
 const NSInteger kMenuTagRun      = 9902;
 const NSInteger kMenuTagLanguage = 9904;
 const NSInteger kMenuTagPlugins  = 9905;
+const NSInteger kMenuTagWindow = 9906;
+const NSInteger kMenuTagHelp = 9907;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,8 +131,9 @@ static NSMenu *buildLanguageMenu() {
     NSMenu *appMenu = submenu(@"App");
     appItem.submenu = appMenu;
     [appMenu addItemWithTitle:@"About Nextpad++" action:@selector(showAboutPanel:) keyEquivalent:@""];
-    [appMenu addItemWithTitle:@"Check for Updates…" action:@selector(checkForUpdates:) keyEquivalent:@""];
-    [appMenu addItemWithTitle:@"Install nextpad++ Command Line Tool…" action:@selector(installCommandLineTool:) keyEquivalent:@""];
+    [appMenu addItemWithTitle:@"Check Upstream Releases…" action:@selector(checkForUpdates:) keyEquivalent:@""];
+    NSMenuItem *cliItem = [appMenu addItemWithTitle:@"Install nextpad++ Command Line Tool…" action:@selector(installCommandLineTool:) keyEquivalent:@""];
+    cliItem.hidden = YES;
     addSep(appMenu);
     // Apple renamed "Preferences…" to "Settings…" starting in macOS Ventura (13).
     NSString *prefsTitle = ([NSProcessInfo processInfo].operatingSystemVersion.majorVersion >= 13)
@@ -846,6 +850,7 @@ static NSMenu *buildLanguageMenu() {
 
     // ── Window ────────────────────────────────────────────────────────────────
     NSMenuItem *winItem = [[NSMenuItem alloc] init];
+    winItem.tag = kMenuTagWindow;
     [main addItem:winItem];
     NSMenu *winMenu = submenu(@"Window");
     winItem.submenu = winMenu;
@@ -873,6 +878,7 @@ static NSMenu *buildLanguageMenu() {
 
     // ── Help ──────────────────────────────────────────────────────────────────
     NSMenuItem *helpItem = [[NSMenuItem alloc] init];
+    helpItem.tag = kMenuTagHelp;
     [main addItem:helpItem];
     NSMenu *helpMenu = submenu(@"Help");
     helpItem.submenu = helpMenu;
@@ -888,6 +894,18 @@ static NSMenu *buildLanguageMenu() {
     // [helpMenu addItem:item(@"Nextpad++ Community (Forum)", @selector(openNppForum:),       @"")];
     addSep(helpMenu);
     [helpMenu addItem:item(@"Debug Info…", @selector(showDebugInfo:), @"")];
+    [self applyVisibility];
+}
+
+ + (void)applyVisibility {
+    NSDictionary *values = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NppMenuVisibilityOverrides];
+    NSDictionary *tags = @{@"macro": @(kMenuTagMacro), @"run": @(kMenuTagRun),
+                           @"window": @(kMenuTagWindow), @"help": @(kMenuTagHelp)};
+    for (NSString *key in tags) {
+        NSMenuItem *root = [NSApp.mainMenu itemWithTag:[tags[key] integerValue]];
+        root.hidden = values[key] ? ![values[key] boolValue] : NO;
+        root.allowsKeyEquivalentWhenHidden = YES;
+    }
 }
 
 + (void)insertPluginMenuItems:(NSArray<NSMenuItem *> *)items {

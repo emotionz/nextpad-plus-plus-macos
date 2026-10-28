@@ -157,7 +157,7 @@ static NSString *normalizeForLookup(NSString *s) {
     NSMutableDictionary *tmap = [NSMutableDictionary dictionaryWithCapacity:englishRaw.count];
     NSMutableDictionary *mmap = [NSMutableDictionary dictionary];
 
-    for (NSString *key in englishRaw) {
+    for (NSString *key in [[englishRaw allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
         if ([key hasPrefix:@"__"]) continue; // skip metadata keys
 
         NSString *englishVal  = englishRaw[key];
@@ -192,7 +192,7 @@ static NSString *normalizeForLookup(NSString *s) {
     // Also index every dialog item name (stripped of accelerators) directly,
     // so panel code can call translate:@"Match case" and get the right result.
     // We do this as a second pass using just the english name as key.
-    for (NSString *key in englishRaw) {
+    for (NSString *key in [[englishRaw allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
         if (![key hasPrefix:@"dlg:"] && ![key hasPrefix:@"dlgattr:"] &&
             ![key hasPrefix:@"tabbar:"]) continue;
         NSString *englishVal    = englishRaw[key];
@@ -207,6 +207,12 @@ static NSString *normalizeForLookup(NSString *s) {
         if (normalized.length > 0 && !tmap[normalized]) {
             tmap[normalized] = displayTranslated;
         }
+    }
+
+    for (NSString *key in [[englishRaw allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+        if (![key hasPrefix:@"dlg:MacStrings:"]) continue;
+        NSString *translated = targetRaw[key];
+        if (translated.length) tmap[normalizeForLookup(englishRaw[key])] = stripAccelerators(translated);
     }
 
     // Platform-specific aliases: macOS uses slightly different wording for a

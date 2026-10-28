@@ -1,3 +1,6 @@
+#import "MainWindowController.h"
+#import "MenuBuilder.h"
+#import "NppUIConfiguration.h"
 #import "PreferencesWindowController.h"
 #import "NppPaths.h"
 #import "NppLocalizer.h"
@@ -427,6 +430,12 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
 }
 
 - (void)_updateToolbarPageControlsEnabledState:(NSView *)pageView hidden:(BOOL)isHidden {
+    if (pageView.subviews.count == 1 && [pageView.subviews.firstObject isKindOfClass:NSTabView.class]) {
+        NSTabView *tabs = (NSTabView *)pageView.subviews.firstObject;
+        NSScrollView *scroll = (NSScrollView *)tabs.tabViewItems[1].view;
+        [self _updateToolbarPageControlsEnabledState:scroll.documentView hidden:isHidden];
+        return;
+    }
     // Enable or disable all color and styling settings on the page, except for the "Hide" checkbox.
     for (NSView *sub in pageView.subviews) {
         if ([sub respondsToSelector:@selector(setEnabled:)]) {
@@ -446,6 +455,7 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
     // Rebuild sidebar page names with new translations
     _pageNames = [NSMutableArray arrayWithArray:@[
         [loc translate:@"General"],
+        [loc translate:@"Menu Bar"],
         [loc translate:@"Toolbar"],
         [loc translate:@"Editor"],
         [loc translate:@"Indentation"],
@@ -505,6 +515,7 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
     // ── Page names (sidebar rows) ────────────────────────────────────────────
     _pageNames = [NSMutableArray arrayWithArray:@[
         [[NppLocalizer shared] translate:@"General"],
+        [[NppLocalizer shared] translate:@"Menu Bar"],
         [[NppLocalizer shared] translate:@"Toolbar"],
         [[NppLocalizer shared] translate:@"Editor"],
         [[NppLocalizer shared] translate:@"Indentation"],
@@ -746,6 +757,7 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
 - (NSView *)_buildPageForName:(NSString *)name {
     NppLocalizer *loc = [NppLocalizer shared];
     if ([name isEqualToString:[loc translate:@"General"]])         return [self _buildGeneralPage];
+    if ([name isEqualToString:[loc translate:@"Menu Bar"]]) return [self _buildMenuBarPage];
     if ([name isEqualToString:[loc translate:@"Toolbar"]])         return [self _buildToolbarPage];
     if ([name isEqualToString:[loc translate:@"Editor"]])          return [self _buildEditorPage];
     if ([name isEqualToString:[loc translate:@"Indentation"]])    return [self _buildIndentationPage];
@@ -853,9 +865,97 @@ NSString *const kPrefStyleFontSize      = @"styleFontSize";
     return v;
 }
 
-#pragma mark - Toolbar Page
+- (NSView *)_buildMenuBarPage {
+    NSView *view = [[NSView alloc] init];
+    NppLocalizer *loc = [NppLocalizer shared];
+    NSTextField *heading = [NSTextField labelWithString:[loc translate:@"Choose which menus appear in the menu bar."]];
+    heading.frame = NSMakeRect(20, 370, 440, 24); [view addSubview:heading];
+    NSDictionary *values = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NppMenuVisibilityOverrides];
+    NSArray *rows = @[@[@"macro", @"Macro"], @[@"run", @"Run"], @[@"window", @"Window"], @[@"help", @"Help"]];
+    CGFloat y = 330;
+    for (NSArray *row in rows) {
+        NSButton *button = [NSButton checkboxWithTitle:[loc translate:row[1]] target:self action:@selector(_menuFunctionChanged:)];
+        button.identifier = row[0];
+        button.state = (!values[row[0]] || [values[row[0]] boolValue]) ? NSControlStateValueOn : NSControlStateValueOff;
+        button.frame = NSMakeRect(20, y, 420, 24); [view addSubview:button]; y -= 34;
+    }
+    NSButton *reset = [NSButton buttonWithTitle:[loc translate:@"Reset to Defaults"] target:self action:@selector(_resetMenuFunctions:)];
+    reset.frame = NSMakeRect(20, y - 12, 180, 28); [view addSubview:reset];
+    return view;
+}
+
+- (void)_resetMenuFunctions:(id)sender {
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:NppMenuVisibilityOverrides];
+    [MenuBuilder applyVisibility];
+    [self retranslateUI];
+}
+
+- (void)_resetToolbarFunctions:(id)sender {
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:NppToolbarVisibilityOverrides];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NppToolbarVisibilityChanged object:nil];
+    [self retranslateUI];
+}
+
+- (void)_menuFunctionChanged:(NSButton *)sender {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSMutableDictionary *values = [[defaults dictionaryForKey:NppMenuVisibilityOverrides] mutableCopy] ?: [NSMutableDictionary dictionary];
+    values[sender.identifier] = @(sender.state == NSControlStateValueOn);
+    [defaults setObject:values forKey:NppMenuVisibilityOverrides];
+    [MenuBuilder applyVisibility];
+}
+
+- (void)_toolbarFunctionChanged:(NSButton *)sender {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSMutableDictionary *values = [[defaults dictionaryForKey:NppToolbarVisibilityOverrides] mutableCopy] ?: [NSMutableDictionary dictionary];
+    values[sender.identifier] = @(sender.state == NSControlStateValueOn);
+    [defaults setObject:values forKey:NppToolbarVisibilityOverrides];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NppToolbarVisibilityChanged object:nil];
+}
 
 - (NSView *)_buildToolbarPage {
+    NSTabView *tabs = [[NSTabView alloc] initWithFrame:NSMakeRect(0, 0, 480, 410)];
+    tabs.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    NppLocalizer *loc = [NppLocalizer shared];
+    NSArray *items = [MainWindowController toolbarConfigurationItems];
+    CGFloat height = MAX(390, 104 + items.count * 28);
+    NSView *functions = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 450, height)];
+    NSTextField *note = [NSTextField wrappingLabelWithString:[loc translate:@"New, Open and Save are always shown when the toolbar is visible. Other buttons can be hidden individually."]];
+    note.frame = NSMakeRect(16, height - 48, 420, 40); [functions addSubview:note];
+    CGFloat y = height - 78;
+    for (NSDictionary *item in items) {
+        NSButton *button = [NSButton checkboxWithTitle:item[@"title"] target:self action:@selector(_toolbarFunctionChanged:)];
+        button.identifier = item[@"id"];
+        button.state = [item[@"visible"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+        button.enabled = !NppToolbarItemRequired(button.identifier);
+        button.frame = NSMakeRect(20, y, 410, 24);
+        [functions addSubview:button]; y -= 28;
+    }
+    NSButton *reset = [NSButton buttonWithTitle:[loc translate:@"Reset to Defaults"] target:self action:@selector(_resetToolbarFunctions:)];
+    reset.frame = NSMakeRect(20, y - 8, 180, 28); [functions addSubview:reset];
+    NSView *appearance = [self _buildToolbarAppearancePage];
+    appearance.frame = NSMakeRect(0, 0, 460, 490);
+    for (NSView *control in appearance.subviews) {
+        NSRect frame = control.frame; frame.origin.y += 80; control.frame = frame;
+    }
+    NSArray *pages = @[functions, appearance];
+    NSArray *titles = @[@"Function Visibility", @"Appearance"];
+    for (NSUInteger i = 0; i < pages.count; i++) {
+        NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 460, 380)];
+        scroll.hasVerticalScroller = YES; scroll.autohidesScrollers = YES;
+        scroll.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        scroll.documentView = pages[i];
+        NSTabViewItem *tab = [[NSTabViewItem alloc] initWithIdentifier:titles[i]];
+        tab.label = [loc translate:titles[i]]; tab.view = scroll; [tabs addTabViewItem:tab];
+        [scroll.documentView scrollPoint:NSMakePoint(0, NSHeight([pages[i] frame]))];
+    }
+    NSView *container = [[NSView alloc] initWithFrame:tabs.frame];
+    [container addSubview:tabs];
+    return container;
+}
+
+#pragma mark - Toolbar Page
+
+- (NSView *)_buildToolbarAppearancePage {
     NSView *v = [[NSView alloc] init];
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
     NppLocalizer *loc = [NppLocalizer shared];

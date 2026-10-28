@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class TabManager;
 
 @interface MainWindowController : NSWindowController
++ (NSArray<NSDictionary *> *)toolbarConfigurationItems;
 
 /// Open a file (called by AppDelegate when the OS hands us a file to open).
 - (void)openFileAtPath:(NSString *)path;
