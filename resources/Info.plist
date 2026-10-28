@@ -10,9 +10,11 @@
     <key>CFBundleIdentifier</key>
     <string>org.nextpadplusplus.mac</string>
     <key>CFBundleVersion</key>
-    <string>1.0.8</string>
+    <string>@NPP_BUILD_NUMBER@</string>
+    <key>NppUpstreamBaseVersion</key>
+    <string>@NPP_UPSTREAM_VERSION@</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.8</string>
+    <string>@NPP_FORK_VERSION@</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
