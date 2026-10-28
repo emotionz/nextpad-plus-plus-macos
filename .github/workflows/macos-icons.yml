@@ -15,11 +15,21 @@ jobs:
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 3
+          cmake --build build --target NppConfigurationTests --parallel 3
+      - name: Verify configuration behavior
+        shell: bash
+        run: |
+          build/NppConfigurationTests.app/Contents/MacOS/NppConfigurationTests 2>&1 | tee build/configuration-tests.log
       - name: Verify bundle and launch
+        id: bundle
         shell: bash
         run: |
           set -euo pipefail
           app='build/Nextpad++.app'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$(cat build/fork-version.txt)"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NppUpstreamBaseVersion' "$app/Contents/Info.plist")" = "$(cat build/upstream-version.txt)"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")" = "$GITHUB_RUN_NUMBER"
+          echo "version=$(cat build/fork-version.txt)" >> "$GITHUB_OUTPUT"
           bin="$app/Contents/MacOS/Nextpad++"
           lipo "$bin" -verify_arch arm64
           codesign --verify --deep --strict "$app"
@@ -41,14 +51,15 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent 'build/Nextpad++.app' dist/Nextpad-macOS-toolbar.zip
-          hdiutil create -volname 'Nextpad++' -srcfolder 'build/Nextpad++.app' -ov -format UDZO dist/Nextpad-macOS-toolbar.dmg
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'build/Nextpad++.app/Contents/Info.plist')
+          ditto -c -k --sequesterRsrc --keepParent 'build/Nextpad++.app' "dist/Nextpad-v${version}-macOS.zip"
+          hdiutil create -volname 'Nextpad++' -srcfolder 'build/Nextpad++.app' -ov -format UDZO "dist/Nextpad-v${version}-macOS.dmg"
           git rev-parse HEAD > dist/SOURCE_COMMIT.txt
-          cp build/dependencies.txt build/launch.log dist/
+          cp build/dependencies.txt build/launch.log build/configuration-tests.log dist/
           if [ -f build/toolbar-smoke-test.png ]; then cp build/toolbar-smoke-test.png dist/; fi
           shasum -a 256 dist/*.zip dist/*.dmg > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Nextpad-macOS-toolbar
+          name: Nextpad-v${{ steps.bundle.outputs.version }}-macOS
           path: dist/
           retention-days: 30
