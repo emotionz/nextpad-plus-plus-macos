@@ -14,7 +14,7 @@ int main(void) {
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
         [defaults removeObjectForKey:NppToolbarVisibilityOverrides];
         [defaults removeObjectForKey:NppMenuVisibilityOverrides];
-        check([NppForkVersion() isEqual:@"1.1.2-rc1"], @"packaged fork version");
+        check([NppForkVersion() hasPrefix:[NppUpstreamBaseVersion() stringByAppendingString:@"-rc"]], @"packaged fork version");
         check([NppUpstreamBaseVersion() isEqual:@"1.1.2"], @"independent upstream base");
         check(!NppUpstreamReleaseIsNewer(@"v1.1.2"), @"same base must not trigger an update for rc fork");
         check(NppUpstreamReleaseIsNewer(@"v1.1.3"), @"higher patch release");

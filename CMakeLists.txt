@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(NotepadPlusPlusMac OBJCXX CXX C)
 include(ForkVersion.cmake)
+file(WRITE "${CMAKE_BINARY_DIR}/fork-version.txt" "${NPP_FORK_VERSION}")
+file(WRITE "${CMAKE_BINARY_DIR}/upstream-version.txt" "${NPP_UPSTREAM_VERSION}")
 set(NPP_BUILD_NUMBER "$ENV{GITHUB_RUN_NUMBER}")
 if(NOT NPP_BUILD_NUMBER MATCHES "^[0-9]+$")
     set(NPP_BUILD_NUMBER "1")
