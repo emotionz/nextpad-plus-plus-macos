@@ -1709,7 +1709,9 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor) {
 		scrollView.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
 		//[scrollView setScrollerStyle:NSScrollerStyleLegacy];
 		//[scrollView setScrollerKnobStyle:NSScrollerKnobStyleDark];
-		//[scrollView setHorizontalScrollElasticity:NSScrollElasticityNone];
+		// Drag selection adjusts the clip origin while wheel scrolling is active.
+		// Keep horizontal scrolling within bounds to avoid AppKit snap-back.
+		[scrollView setHorizontalScrollElasticity:NSScrollElasticityNone];
 		[self addSubview: scrollView];
 
 		marginView = [[SCIMarginView alloc] initWithScrollView: scrollView];
