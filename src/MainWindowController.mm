@@ -2317,6 +2317,15 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
         ![ids[index + 1] isEqualToString:NSToolbarFlexibleSpaceItemIdentifier];
 }
 
+- (BOOL)_hasVisibleTahoePluginButtons {
+    NSDictionary *group = [self _tahoePluginsGroup];
+    for (NSDictionary *item in [self _visiblePluginToolbarItems]) {
+        BOOL placed = [group[@"primary"] containsObject:item[@"tooltip"]] || [group[@"overflow"] containsObject:item[@"tooltip"]];
+        if (NppToolbarItemVisible(NppPluginToolbarIdentifier(item), placed)) return YES;
+    }
+    return NO;
+}
+
 - (NSArray<NSDictionary *> *)_visiblePluginToolbarItems {
     NSMutableArray *items = [NSMutableArray array];
     for (NSDictionary *pti in _pluginToolbarItems) {
@@ -2382,7 +2391,7 @@ static void _nppTahoeRoundEditorCard(NSView *container, NSView *content) {
     _toolbarConfig = _parseToolbarConfig();
     // Tahoe profile: load (or materialize) the group layout from
     // toolbarButtonsTahoeConf.xml before the toolbar delegate is queried.
-    if ([self _toolbarUsesTahoe]) [self _loadTahoeToolbarModel];
+    if ([self _toolbarUsesTahoe]) { [self _loadTahoeToolbarModel]; [self _reconcileTahoePluginsIfNeeded]; }
 
     NSToolbar *tb = [[NSToolbar alloc] initWithIdentifier:@"NppToolbar"];
     tb.delegate = self;
@@ -3220,7 +3229,7 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
         first = NO;
         [ids addObject:[kTBTahoeGroupPrefix stringByAppendingString:g[@"label"]]];
     }
-    if ([self _visiblePluginToolbarItems].count > 0) {
+    if ([self _hasVisibleTahoePluginButtons]) {
         [ids addObject:NSToolbarSpaceItemIdentifier];
         [ids addObject:kTBTahoePluginsGroup];
     }
@@ -3439,7 +3448,8 @@ static NSDictionary<NSString *, NSString *> *_tahoeButtonDisplayNames(void) {
                 [tb.items[i - 1].itemIdentifier isEqualToString:NSToolbarSpaceItemIdentifier])
                 [tb removeItemAtIndex:i - 1];
         }
-    if (_pluginToolbarItems.count == 0) return;
+    [self _reconcileTahoePluginsIfNeeded];
+    if (![self _hasVisibleTahoePluginButtons]) return;
     NSInteger insertIdx = tb.items.count;
     for (NSInteger i = 0; i < (NSInteger)tb.items.count; i++)
         if ([tb.items[i].itemIdentifier isEqualToString:NSToolbarFlexibleSpaceItemIdentifier]) {

@@ -40,9 +40,13 @@ static NSString *stripAccelerators(NSString *s) {
 ///   • strip trailing parenthetical suffixes like " (Ctrl+Mouse Wheel Up)"
 ///   • trim whitespace
 ///   • lowercase
+static NSString *exactForLookup(NSString *s) {
+    s = [stripAccelerators(s) stringByReplacingOccurrencesOfString:@"..." withString:@"…"];
+    return [[s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet] lowercaseString];
+}
+
 static NSString *normalizeForLookup(NSString *s) {
-    s = stripAccelerators(s);
-    s = [s stringByReplacingOccurrencesOfString:@"..." withString:@"…"];
+    s = exactForLookup(s);
 
     // Strip trailing parenthetical, e.g. " (Ctrl+Mouse Wheel Up)"
     NSRange parenStart = [s rangeOfString:@" (" options:NSBackwardsSearch];
@@ -183,6 +187,7 @@ static NSString *normalizeForLookup(NSString *s) {
         if (normalized.length == 0) continue;
 
         tmap[normalized] = displayTranslated;
+        tmap[[@"exact:" stringByAppendingString:exactForLookup(englishVal)]] = displayTranslated;
 
         // Also add a paren-stripped version as a secondary key, so that
         // "Zoom In (Ctrl+Mouse Wheel Up)" in the XML matches "Zoom In" in the menu.
@@ -212,7 +217,10 @@ static NSString *normalizeForLookup(NSString *s) {
     for (NSString *key in [[englishRaw allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
         if (![key hasPrefix:@"dlg:MacStrings:"]) continue;
         NSString *translated = targetRaw[key];
-        if (translated.length) tmap[normalizeForLookup(englishRaw[key])] = stripAccelerators(translated);
+        if (translated.length) {
+            tmap[normalizeForLookup(englishRaw[key])] = stripAccelerators(translated);
+            tmap[[@"exact:" stringByAppendingString:exactForLookup(englishRaw[key])]] = stripAccelerators(translated);
+        }
     }
 
     // Platform-specific aliases: macOS uses slightly different wording for a
@@ -250,7 +258,7 @@ static NSString *normalizeForLookup(NSString *s) {
 - (NSString *)translate:(NSString *)english {
     if (english.length == 0) return english;
     NSString *key = normalizeForLookup(english);
-    NSString *translated = self.translationMap[key];
+    NSString *translated = self.translationMap[[@"exact:" stringByAppendingString:exactForLookup(english)]] ?: self.translationMap[key];
     // Uncomment for debug: if (!translated) NSLog(@"[NppLocalizer] MISS: \"%@\"", english);
     // Fallback (no translation found) goes through stripAccelerators so
     // Win32-style "&&" → "&" cleanup applies for English-only display too.
@@ -690,7 +698,7 @@ static const char kOriginalSubmenuTitleKey = 0;
     NSString *englishTitle = stored ?: menu.title;
 
     NSString *key = normalizeForLookup(englishTitle);
-    NSString *translated = self.translationMap[key];
+    NSString *translated = self.translationMap[[@"exact:" stringByAppendingString:exactForLookup(englishTitle)]] ?: self.translationMap[key];
 
     if (translated.length > 0) {
         if (!stored) {
@@ -712,7 +720,7 @@ static const char kOriginalSubmenuTitleKey = 0;
     NSString *englishTitle = stored ?: item.title;
 
     NSString *key = normalizeForLookup(englishTitle);
-    NSString *translated = self.translationMap[key];
+    NSString *translated = self.translationMap[[@"exact:" stringByAppendingString:exactForLookup(englishTitle)]] ?: self.translationMap[key];
 
     if (translated.length > 0) {
         // Save the original English title so future language switches can
